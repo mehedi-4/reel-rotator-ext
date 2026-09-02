@@ -1,12 +1,26 @@
 {
   "manifest_version": 3,
   "name": "Instagram Reel Rotator",
-  "version": "1.0",
+  "version": "1.1",
   "description": "Rotate landscape Instagram Reels on desktop for a better viewing experience",
+  "permissions": ["storage"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Reel Rotator Settings"
+  },
   "content_scripts": [
     {
       "matches": ["https://www.instagram.com/*"],
-      "js": ["content.js"],
+      "js": [
+        "src/state.js",
+        "src/dom-utils.js",
+        "src/rotation.js",
+        "src/focus.js",
+        "src/actions.js",
+        "src/ui.js",
+        "src/keymap.js",
+        "content.js"
+      ],
       "css": ["styles.css"],
       "run_at": "document_idle"
     }
