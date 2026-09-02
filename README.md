@@ -1,82 +1,83 @@
 # Instagram Reel Rotator 🔄
 
-A Chrome extension that lets you rotate and focus landscape Instagram Reels on desktop — just like rotating your phone.
+A Chrome / Brave extension that lets you rotate and focus landscape Instagram Reels on desktop — just like rotating your phone. Also adds keyboard shortcuts for the most common Reels actions (react, send, comment, mute, pause).
 
 ## The Problem
 
 Landscape videos on Instagram Reels look tiny and sideways on desktop. You can't rotate your monitor like you'd rotate your phone.
 
+## Features
+
+- **Rotate any Reel** 90° counter-clockwise per press (cycles back to 0° after a full turn).
+- **Focus mode** — a dark blurred backdrop with the video centered, fit to the viewport at any rotation.
+- **Focus-mode reel navigation** — arrow keys, W/A keys, mouse wheel, or trackpad. Rotation carries over to the next reel.
+- **Media controls** in focus mode — Space pauses, M mutes.
+- **Native Instagram actions from the keyboard** — Q likes/unlikes, S opens the share dialog, C opens comments.
+- **Customizable shortcuts** — rebind any letter through a toolbar popup. Changes apply live, no reload.
+- **Auto-sizing** — at any rotation, the video fills the viewport while staying fully visible.
+
 ## Install
 
+### Chrome
+
 1. Download/clone this folder
-2. Open `chrome://extensions/` in Chrome
+2. Open `chrome://extensions/`
 3. Enable **Developer mode** (top-right toggle)
 4. Click **Load unpacked**
 5. Select this folder
 6. Go to [instagram.com/reels](https://instagram.com/reels) — done!
 
+### Brave
+
+Same as Chrome, but use `brave://extensions/` instead of `chrome://extensions/`. If the Reel Rotator icon doesn't appear in your toolbar, click the puzzle-piece / extensions icon and pin it.
+
+> Tip: if rotation doesn't seem to work on Instagram, click the Brave lion icon in the address bar and toggle Shields **Down** for `instagram.com`, then reload.
+
 ## Usage
+
+### Rebindable shortcuts
+
+Click the **Reel Rotator** icon in your toolbar to customize. Defaults:
 
 | Key | Action |
 |-----|--------|
 | `R` | Rotate video 90° counter-clockwise |
-| `F` | Focus mode — video goes fullscreen with dark backdrop |
-| `Esc`,  `F` | Exit focus mode |
-| `W` | Previous reel — **while in focus mode** *(rebindable)* |
-| `A` | Next reel — **while in focus mode** *(rebindable)* |
+| `F` | Focus mode (toggle) |
+| `W` | Previous reel — *while in focus mode* |
+| `A` | Next reel — *while in focus mode* |
 | `Q` | React (like / unlike) the active reel |
 | `S` | Open Instagram's share dialog |
 | `C` | Open comments |
 
-### Focus-mode-only shortcuts (default, not rebindable)
+### Always-on shortcuts (not rebindable)
 
-These always work the same way inside focus mode and don't appear in Settings:
+| Key | Mode | Action |
+|-----|------|--------|
+| `M` | Anywhere | Mute / unmute the active video |
+| `Space` | Focus only | Pause / resume |
+| `↑` | Focus only | Previous reel |
+| `↓` | Focus only | Next reel |
+| `Esc` | Focus only | Exit focus mode |
+| Click backdrop | Focus only | Exit focus mode |
 
-| Key | Action |
-|-----|--------|
-| `↑` | Previous reel |
-| `↓` | Next reel |
-| `Space` | Pause / resume |
-| `Esc` | Exit focus mode |
+The user's mute preference is remembered across pause/play and reel changes inside focus mode — unmute with `M` and that preference sticks on the next reel and after a Space pause/resume.
 
-### Always-on shortcuts (default, not rebindable)
+### Mouse / trackpad
 
-| Key | Action |
-|-----|--------|
-| `M` | Mute / unmute the active video — works in **both** focus mode and the normal feed |
-
-The user's mute preference is remembered across pause/play and reel changes — so if you unmute with `M`, that preference sticks on the next reel and after a Space pause/resume.
-
-You can also click the ↻ button at the bottom-right, or click the dark backdrop to exit focus mode.
-
-In focus mode you can also scroll with the **mouse wheel or trackpad** to move between reels — you stay in focus mode instead of being kicked out. One scroll gesture moves one reel, and your rotation carries over to the next one.
-
-Outside focus mode, scrolling to the next reel resets rotation automatically.
-
-The video is automatically sized to **fill the viewport** as much as possible while remaining fully visible — at any rotation, no black bars, no overflow.
+- **Click ↻ button** (bottom-right) — rotate.
+- **Mouse wheel / trackpad** (focus mode) — navigate reels. One gesture = one reel. Rotation carries over.
+- **Scroll outside focus mode** — resets rotation.
 
 ## Customizing Shortcuts
 
-Click the **Reel Rotator** icon in your Chrome toolbar to open Settings. Each shortcut can be rebound to a different letter; changes apply instantly on the Instagram tab — no reload needed. Use **Reset to defaults** to restore the original bindings.
-
-Default rebindable bindings:
-
-| Action | Default |
-|---|---|
-| Rotate | R |
-| Focus mode | F |
-| Previous reel (focus) | W |
-| Next reel (focus) | A |
-| React (like) | Q |
-| Send | S |
-| Comment | C |
+Click the **Reel Rotator** icon in your Chrome / Brave toolbar to open the Settings popup. Each rebindable shortcut has a letter input; changes apply **instantly** on the Instagram tab — no reload. Use **Reset to defaults** to restore the original bindings.
 
 ## Project Structure
 
 ```
 reel-rotator-ext/
-├── manifest.json          # MV3 manifest, declares split content scripts
-├── content.js             # Thin orchestrator (init + event wiring)
+├── manifest.json          # MV3 manifest, declares split content scripts in load order
+├── content.js             # Thin orchestrator (~30 lines: init + event wiring)
 ├── popup.html / .js / .css # Settings popup (opened via toolbar icon)
 ├── styles.css             # On-page styles (rotate button, focus backdrop)
 ├── src/
@@ -86,8 +87,21 @@ reel-rotator-ext/
 │   ├── focus.js           # Focus mode + scroll-driven reel navigation
 │   ├── actions.js         # reactLike, openSend, openComment
 │   ├── ui.js              # Button creation + observer setup
-│   └── keymap.js          # Keyboard dispatcher, storage hydration, live updates
+│   └── keymap.js          # Keyboard dispatcher + storage hydration + live updates
 └── icons/                 # 16/48/128px toolbar & store icons
 ```
 
-Every module attaches itself to a single shared namespace (`window.__reelRotator`), loaded in dependency order declared in `manifest.json`. This keeps each file focused on one responsibility while sharing state without globals leaking.
+Every module attaches itself to a single shared namespace (`window.__reelRotator`), loaded in dependency order declared in `manifest.json`. This keeps each file focused on one responsibility while sharing state without leaking globals into the page.
+
+### Key bug fixes in this build
+
+- **Rotation in focus mode** no longer overflows the viewport. A new `applyRotationInFocus` reuses the focus-mode layout (fixed centering + swapped dimensions at 90°/270°).
+- **4th rotation press** correctly wraps to 0° without leaving the video at swapped dimensions.
+- **Like/Send/Comment in focus mode** find the buttons in the original reel container (`S.focusSavedStyles._origParent`), not in the lifted video's ancestors.
+- **Pause/play in focus mode** uses capture-phase keydown with `stopImmediatePropagation` so Instagram's "Space = next reel" doesn't override.
+- **Mute stickiness** — `userMuted` preference is re-asserted after pause/play and reel navigation via a per-video capture-phase `play` listener (scoped to the focused video only, so background reels aren't affected).
+
+## License
+
+This project is for personal use. Instagram™ is a trademark of Meta Platforms, Inc.; this extension is not affiliated with or endorsed by Instagram.
+
