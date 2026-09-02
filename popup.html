@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Reel Rotator Settings</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <h1>Reel Rotator</h1>
+    <p class="subtitle">Customize your keyboard shortcuts.</p>
+  </header>
+
+  <form id="settings-form">
+    <div class="row">
+      <label for="rotate">Rotate</label>
+      <input id="rotate" data-action="rotate" maxlength="1" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="row">
+      <label for="focus">Focus mode</label>
+      <input id="focus" data-action="focus" maxlength="1" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="row">
+      <label for="prevReel">Previous reel (focus)</label>
+      <input id="prevReel" data-action="prevReel" maxlength="1" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="row">
+      <label for="nextReel">Next reel (focus)</label>
+      <input id="nextReel" data-action="nextReel" maxlength="1" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="row">
+      <label for="react">React (like)</label>
+      <input id="react" data-action="react" maxlength="1" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="row">
+      <label for="send">Send</label>
+      <input id="send" data-action="send" maxlength="1" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="row">
+      <label for="comment">Comment</label>
+      <input id="comment" data-action="comment" maxlength="1" autocomplete="off" spellcheck="false">
+    </div>
+
+    <div class="actions">
+      <button type="button" id="reset">Reset to defaults</button>
+      <button type="submit" id="save">Save</button>
+    </div>
+
+    <p id="status" role="status" aria-live="polite"></p>
+  </form>
+
+  <footer>
+    <p>Changes apply instantly on the Instagram tab — no reload needed.</p>
+  </footer>
+
+  <script src="popup.js"></script>
+</body>
+</html>
