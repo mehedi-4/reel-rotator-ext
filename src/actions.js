@@ -26,14 +26,22 @@
     const video = getTargetVideo();
     const clicked = clickReelButton(video, ['Like', 'Unlike']);
     if (!clicked && video) {
-      // Fallback: simulate double click on the active video
+      // Fallback: simulate double click on the active video and its overlay wrapper
       try {
+        const vRect = video.getBoundingClientRect();
+        const cx = vRect.left + vRect.width / 2;
+        const cy = vRect.top + vRect.height / 2;
         const dblEvent = new MouseEvent('dblclick', {
           bubbles: true,
           cancelable: true,
           view: window,
+          clientX: cx,
+          clientY: cy,
         });
         video.dispatchEvent(dblEvent);
+        if (video.parentElement) {
+          video.parentElement.dispatchEvent(dblEvent);
+        }
       } catch (_) {}
     }
   }

@@ -11,34 +11,50 @@
 
   /**
    * Pick the video the user is currently looking at.
-   * Strategy:
-   *   1. Prefer a video that is actually playing right now.
-   *   2. Otherwise pick the one whose center is closest to viewport center.
-   *   3. Otherwise any first video on the page.
+  /**
+   * Check if a video element is currently visible in the viewport.
+   */
+  function isVideoVisible(video) {
+    if (!video || !document.contains(video)) return false;
+    const rect = video.getBoundingClientRect();
+    if (rect.width < 50 || rect.height < 50) return false;
+    if (rect.bottom <= 0 || rect.top >= window.innerHeight) return false;
+    const visibleTop = Math.max(0, rect.top);
+    const visibleBottom = Math.min(window.innerHeight, rect.bottom);
+    return (visibleBottom - visibleTop) > Math.min(rect.height * 0.25, 100);
+  }
+
+  /**
+   * Pick the video the user is currently looking at.
+   * Filters to visible viewport videos first to avoid picking off-screen reels.
    */
   function findActiveVideo() {
     if (S.focusMode && S.focusedVideo && document.contains(S.focusedVideo)) {
       return S.focusedVideo;
     }
-    const videos = document.querySelectorAll('video');
+    if (S.rotatedVideo && document.contains(S.rotatedVideo) && isVideoVisible(S.rotatedVideo)) {
+      return S.rotatedVideo;
+    }
+    const videos = Array.from(document.querySelectorAll('video'));
     if (videos.length === 0) return null;
 
-    // Strategy 1: currently playing
-    for (const video of videos) {
+    const visible = videos.filter(isVideoVisible);
+    const candidates = visible.length > 0 ? visible : videos;
+
+    // Strategy 1: Visible and currently playing
+    for (const video of candidates) {
       if (!video.paused && !video.ended && video.readyState > 2) {
         return video;
       }
     }
 
-    // Strategy 2: closest to viewport center
+    // Strategy 2: Closest to viewport center
     let bestVideo = null;
     let bestScore = Infinity;
     const viewportCenter = window.innerHeight / 2;
 
-    for (const video of videos) {
+    for (const video of candidates) {
       const rect = video.getBoundingClientRect();
-      if (rect.width === 0 || rect.height === 0) continue;
-      if (rect.bottom < 0 || rect.top > window.innerHeight) continue;
       const distance = Math.abs(rect.top + rect.height / 2 - viewportCenter);
       if (distance < bestScore) {
         bestScore = distance;
@@ -46,7 +62,7 @@
       }
     }
 
-    return bestVideo || videos[0] || null;
+    return bestVideo || candidates[0] || null;
   }
 
   /**
@@ -144,14 +160,17 @@
 
   /**
    * Walk up from `video` or `origParent` to the nearest ancestor that holds
-   * Like/Comment/Share buttons. That's the "reel card" Instagram's actions belong to.
+   * the like button. Stops before entering the scroll container so it never
+   * leaks into the outer feed.
    */
   function findReelContainer(video, origParent) {
-    const markers = [
-      '[aria-label*="ike" i]',
-      '[aria-label*="omment" i]',
-      '[aria-label*="hare" i]',
-      '[aria-label*="end" i]',
+    const likeMarker = [
+      'button[aria-label="Like" i]',
+      '[role="button"][aria-label="Like" i]',
+      'button[aria-label="Unlike" i]',
+      '[role="button"][aria-label="Unlike" i]',
+      'svg[aria-label="Like" i]',
+      'svg[aria-label="Unlike" i]',
       'svg path[d*="16.792"]',
       'svg path[d*="21.35"]',
       'svg path[d*="3.436"]'
@@ -161,8 +180,8 @@
     const focusParent = origParent || (S.focusMode && S.focusSavedStyles?._origParent);
     if (focusParent && document.contains(focusParent)) {
       let el = focusParent;
-      while (el && el !== document.body) {
-        if (el.querySelector(markers)) return el;
+      while (el && el !== document.body && !isScrollable(el)) {
+        if (el.querySelector(likeMarker)) return el;
         el = el.parentElement;
       }
     }
@@ -170,45 +189,37 @@
     // 2. Walk UP from video.parentElement if video is in the feed (not <body>)
     if (video && video.parentElement && video.parentElement !== document.body && document.contains(video)) {
       let el = video.parentElement;
-      while (el && el !== document.body) {
-        if (el.querySelector(markers)) return el;
+      while (el && el !== document.body && !isScrollable(el)) {
+        if (el.querySelector(likeMarker)) return el;
         el = el.parentElement;
       }
     }
-
-    // 3. Fallback: find the visible reel card closest to viewport center
-    const articles = document.querySelectorAll('article, [role="article"], section');
-    const viewportCenter = window.innerHeight / 2;
-    let bestArticle = null;
-    let bestDist = Infinity;
-    for (const art of articles) {
-      if (!art.querySelector(markers)) continue;
-      const rect = art.getBoundingClientRect();
-      if (rect.height < 200 || rect.bottom < 0 || rect.top > window.innerHeight) continue;
-      const dist = Math.abs(rect.top + rect.height / 2 - viewportCenter);
-      if (dist < bestDist) {
-        bestDist = dist;
-        bestArticle = art;
-      }
-    }
-    if (bestArticle) return bestArticle;
 
     return null;
   }
 
   /**
    * Trigger a click on an element, ensuring React synthetic event handlers
-   * on button/role="button" ancestors receive the proper pointer/mouse sequence.
+   * on button/role="button" ancestors receive the proper pointer/mouse sequence
+   * with accurate viewport coordinates.
    */
   function triggerClick(element) {
     if (!element) return false;
 
     const clickable = element.closest('button, [role="button"]') || element;
+    const rect = clickable.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+
     const eventOptions = {
       bubbles: true,
       cancelable: true,
       view: window,
       buttons: 1,
+      clientX: cx,
+      clientY: cy,
+      screenX: cx,
+      screenY: cy,
     };
 
     try { clickable.dispatchEvent(new PointerEvent('pointerdown', eventOptions)); } catch (_) {}
@@ -226,75 +237,125 @@
   }
 
   /**
+   * Find the like button inside a specific DOM subtree.
+   */
+  function findLikeButtonInScope(scope) {
+    if (!scope) return null;
+
+    // Strategy 1: Exact aria-label match on interactive button or SVG
+    const exactBtn = scope.querySelector(
+      `button[aria-label="Like" i]:not(#reel-rotate-btn):not([id^="reel-"]), ` +
+      `[role="button"][aria-label="Like" i]:not(#reel-rotate-btn):not([id^="reel-"]), ` +
+      `button[aria-label="Unlike" i]:not(#reel-rotate-btn):not([id^="reel-"]), ` +
+      `[role="button"][aria-label="Unlike" i]:not(#reel-rotate-btn):not([id^="reel-"]), ` +
+      `svg[aria-label="Like" i], ` +
+      `svg[aria-label="Unlike" i], ` +
+      `[aria-label="Like" i]:not(#reel-rotate-btn):not([id^="reel-"]), ` +
+      `[aria-label="Unlike" i]:not(#reel-rotate-btn):not([id^="reel-"])`
+    );
+    if (exactBtn) return exactBtn;
+
+    // Strategy 2: Starts-with match (e.g. "Like this reel", "Unlike this post")
+    const prefixBtn = scope.querySelector(
+      `button[aria-label^="Like " i]:not(#reel-rotate-btn):not([id^="reel-"]), ` +
+      `[role="button"][aria-label^="Like " i]:not(#reel-rotate-btn):not([id^="reel-"]), ` +
+      `button[aria-label^="Unlike " i]:not(#reel-rotate-btn):not([id^="reel-"]), ` +
+      `[role="button"][aria-label^="Unlike " i]:not(#reel-rotate-btn):not([id^="reel-"]), ` +
+      `svg[aria-label^="Like " i], ` +
+      `svg[aria-label^="Unlike " i]`
+    );
+    if (prefixBtn) return prefixBtn;
+
+    // Strategy 3: Heart icon SVG path signature (works across all languages)
+    const heartPath = scope.querySelector(
+      'svg path[d*="16.792"], svg path[d*="M16.792"], svg path[d*="21.35"], svg path[d*="3.436"]'
+    );
+    if (heartPath) return heartPath;
+
+    // Strategy 4: Fallback substring match, filtering out like counts and attribution
+    const candidates = scope.querySelectorAll(
+      `[aria-label*="Like" i]:not(#reel-rotate-btn):not([id^="reel-"]), ` +
+      `[aria-label*="Unlike" i]:not(#reel-rotate-btn):not([id^="reel-"])`
+    );
+    for (const el of candidates) {
+      const label = (el.getAttribute('aria-label') || '').toLowerCase();
+      if (label.includes('likes') && !label.includes('unlike')) continue;
+      if (label.includes('liked by')) continue;
+      if (label.includes('count')) continue;
+      return el;
+    }
+
+    return null;
+  }
+
+  /**
+   * Find the like button for a given video.
+   * Combines ancestor container lookup with spatial vertical alignment
+   * to guarantee the button belonging to the active on-screen reel is selected.
+   */
+  function findLikeButtonForVideo(video) {
+    if (!video) return null;
+
+    // 1. Check inside the resolved reel container
+    const container = findReelContainer(video);
+    if (container) {
+      const btn = findLikeButtonInScope(container);
+      if (btn) return btn;
+    }
+
+    // 2. Spatial match: find all like buttons on the page and select the one
+    // vertically aligned with the active video
+    const vRect = video.getBoundingClientRect();
+    const likeSelectors = [
+      'button[aria-label="Like" i]',
+      '[role="button"][aria-label="Like" i]',
+      'button[aria-label="Unlike" i]',
+      '[role="button"][aria-label="Unlike" i]',
+      'svg[aria-label="Like" i]',
+      'svg[aria-label="Unlike" i]',
+      '[aria-label="Like" i]',
+      '[aria-label="Unlike" i]',
+      'button[aria-label^="Like " i]',
+      '[role="button"][aria-label^="Like " i]',
+      'button[aria-label^="Unlike " i]',
+      '[role="button"][aria-label^="Unlike " i]',
+      'svg path[d*="16.792"]',
+      'svg path[d*="21.35"]',
+      'svg path[d*="3.436"]'
+    ].join(', ');
+
+    const allCandidates = document.querySelectorAll(likeSelectors);
+    let bestBtn = null;
+    let bestDist = Infinity;
+
+    for (const el of allCandidates) {
+      if (el.id === 'reel-rotate-btn' || el.id?.startsWith('reel-')) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) continue;
+
+      // Must be vertically aligned with the active video
+      if (r.bottom < vRect.top - 50 || r.top > vRect.bottom + 50) continue;
+
+      const dist = Math.abs(r.top + r.height / 2 - (vRect.top + vRect.height / 2));
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestBtn = el;
+      }
+    }
+
+    return bestBtn;
+  }
+
+  /**
    * Click the matching Instagram action button on the active reel.
-   * Tries exact matches first, then prefix matches, then heart SVG paths,
-   * then filtered substring matches.
    * Returns true if a button was clicked, false otherwise.
    */
   function clickReelButton(video, labelFragments) {
-    const S = RR.state;
-    let scope = null;
+    if (!video) return false;
 
-    if (S.focusMode && S.focusSavedStyles && S.focusSavedStyles._origParent) {
-      scope = findReelContainer(video, S.focusSavedStyles._origParent);
-    } else {
-      scope = findReelContainer(video);
-    }
-    if (!scope) scope = document;
-
-    const isLikeAction = labelFragments.some(
-      f => f.toLowerCase() === 'like' || f.toLowerCase() === 'unlike'
-    );
-
-    // Strategy 1: Exact aria-label match on button or SVG (avoids matching like counts)
-    for (const frag of labelFragments) {
-      const exactBtn = scope.querySelector(
-        `button[aria-label="${frag}" i]:not(#reel-rotate-btn):not([id^="reel-"]), ` +
-        `[role="button"][aria-label="${frag}" i]:not(#reel-rotate-btn):not([id^="reel-"]), ` +
-        `svg[aria-label="${frag}" i], ` +
-        `[aria-label="${frag}" i]:not(#reel-rotate-btn):not([id^="reel-"])`
-      );
-      if (exactBtn) {
-        return triggerClick(exactBtn);
-      }
-    }
-
-    // Strategy 2: Starts-with match (e.g. "Like this reel", "Unlike this post")
-    for (const frag of labelFragments) {
-      const prefixBtn = scope.querySelector(
-        `button[aria-label^="${frag} " i]:not(#reel-rotate-btn):not([id^="reel-"]), ` +
-        `[role="button"][aria-label^="${frag} " i]:not(#reel-rotate-btn):not([id^="reel-"]), ` +
-        `svg[aria-label^="${frag} " i], ` +
-        `[aria-label^="${frag} " i]:not(#reel-rotate-btn):not([id^="reel-"])`
-      );
-      if (prefixBtn) {
-        return triggerClick(prefixBtn);
-      }
-    }
-
-    // Strategy 3: For like/unlike, locate by Instagram's heart icon SVG path signature.
-    // Works reliably across all localized languages.
-    if (isLikeAction) {
-      const heartPath = scope.querySelector(
-        'svg path[d*="16.792"], svg path[d*="M16.792"], svg path[d*="21.35"], svg path[d*="3.436"]'
-      );
-      if (heartPath) {
-        return triggerClick(heartPath);
-      }
-    }
-
-    // Strategy 4: Fallback substring match, filtering out like counts and attribution
-    for (const frag of labelFragments) {
-      const candidates = scope.querySelectorAll(
-        `[aria-label*="${frag}" i]:not(#reel-rotate-btn):not([id^="reel-"])`
-      );
-      for (const el of candidates) {
-        const label = (el.getAttribute('aria-label') || '').toLowerCase();
-        if (label.includes('likes') && !label.includes('unlike')) continue;
-        if (label.includes('liked by')) continue;
-        if (label.includes('count')) continue;
-        return triggerClick(el);
-      }
+    const btn = findLikeButtonForVideo(video);
+    if (btn) {
+      return triggerClick(btn);
     }
 
     return false;
