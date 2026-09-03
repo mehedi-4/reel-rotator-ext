@@ -13,8 +13,6 @@
     prevReel: 'w',
     nextReel: 's',
     react:    'q',
-    send:     'a',
-    comment:  'c',
   };
 
   const inputs = Array.from(document.querySelectorAll('input[data-action]'));
@@ -28,11 +26,12 @@
   function loadKeymap() {
     chrome.storage.local.get({ keymap: DEFAULTS }, (res) => {
       const stored = res.keymap || {};
-      if (stored.nextReel === 'a' && stored.send === 's') {
+      delete stored.send;
+      delete stored.comment;
+      if (stored.nextReel === 'a') {
         stored.nextReel = 's';
-        stored.send = 'a';
-        try { chrome.storage.local.set({ keymap: stored }); } catch (_) {}
       }
+      try { chrome.storage.local.set({ keymap: stored }); } catch (_) {}
       const km = { ...DEFAULTS, ...stored };
       inputs.forEach((inp) => {
         inp.value = (km[inp.dataset.action] || '').toLowerCase();

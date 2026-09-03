@@ -1,10 +1,8 @@
 // ─── src/actions.js ───────────────────────────────────────────────
-// Instagram-native action triggers (react / send / comment).
+// Instagram-native action triggers (react / like).
 //
-// Each action finds the active reel's matching button via aria-label
-// and clicks it. Instagram's own UI handles the rest — animations,
-// state, dialogs. This includes the natural toggle behavior of the
-// like button: clicking it again un-likes.
+// Finds the active reel's like button and clicks it. Instagram's own UI
+// handles the rest — animations, state, toggle behavior.
 
 (function () {
   'use strict';
@@ -40,22 +38,8 @@
     }
   }
 
-  /** Open Instagram's native share/send dialog. */
-  function openSend() {
-    const video = getTargetVideo();
-    clickReelButton(video, ['Share', 'Send']);
-  }
-
-  /** Open Instagram's native comment composer / panel. */
-  function openComment() {
-    const video = getTargetVideo();
-    clickReelButton(video, ['Comment']);
-  }
-
   // ── Expose ──────────────────────────────────────────────────────────
   RR.actions = {
     reactLike,
-    openSend,
-    openComment,
   };
 })();

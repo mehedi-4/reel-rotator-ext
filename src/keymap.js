@@ -22,8 +22,6 @@
     prevReel:  'w',
     nextReel:  's',
     react:     'q',
-    send:      'a',
-    comment:   'c',
   });
 
   // Working copy. Hydrated from storage on init; updated live thereafter.
@@ -40,8 +38,6 @@
     prevReel:  () => RR.focus.navigate(-1),
     nextReel:  () => RR.focus.navigate(+1),
     react:     () => RR.actions.reactLike(),
-    send:      () => RR.actions.openSend(),
-    comment:   () => RR.actions.openComment(),
   };
 
   function runAction(action) {
@@ -54,13 +50,16 @@
     try {
       chrome.storage.local.get({ keymap: DEFAULT_KEYMAP }, (res) => {
         const stored = res.keymap || {};
-        // Auto-migrate old defaults where nextReel was 'a' and send was 's'
-        if (stored.nextReel === 'a' && stored.send === 's') {
+        delete stored.send;
+        delete stored.comment;
+        if (stored.nextReel === 'a') {
           stored.nextReel = 's';
-          stored.send = 'a';
-          try { chrome.storage.local.set({ keymap: stored }); } catch (_) {}
         }
+        try { chrome.storage.local.set({ keymap: stored }); } catch (_) {}
         keymap = { ...DEFAULT_KEYMAP, ...stored };
+        for (const k of Object.keys(keymap)) {
+          if (!(k in DEFAULT_KEYMAP)) delete keymap[k];
+        }
         if (callback) callback();
       });
     } catch (_) {

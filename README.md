@@ -1,6 +1,6 @@
 # Instagram Reel Rotator 🔄
 
-A Chrome / Brave extension that lets you rotate and focus landscape Instagram Reels on desktop — just like rotating your phone. Also adds keyboard shortcuts for the most common Reels actions (react, send, comment, mute, pause).
+A Chrome / Brave extension that lets you rotate and focus landscape Instagram Reels on desktop — just like rotating your phone. Also adds keyboard shortcuts for common Reels actions (like, rotate, focus, navigate, mute, pause).
 
 ## The Problem
 
@@ -12,7 +12,7 @@ Landscape videos on Instagram Reels look tiny and sideways on desktop. You can't
 - **Focus mode** — a dark blurred backdrop with the video centered, fit to the viewport at any rotation.
 - **Reel navigation** — W/S keys, arrow keys, mouse wheel, or trackpad (in both focus mode and normal feed). Rotation carries over to the next reel.
 - **Media controls** in focus mode — Space pauses, M mutes.
-- **Native Instagram actions from the keyboard** — Q likes/unlikes, A opens the share dialog, C opens comments.
+- **Native Instagram like from the keyboard** — Q likes/unlikes the active reel.
 - **Customizable shortcuts** — rebind any letter through a toolbar popup. Changes apply live, no reload.
 - **Auto-sizing** — at any rotation, the video fills the viewport while staying fully visible.
 
@@ -47,8 +47,6 @@ Click the **Reel Rotator** icon in your toolbar to customize. Defaults:
 | `W` | Previous reel (up) |
 | `S` | Next reel (down) |
 | `Q` | React (like / unlike) the active reel |
-| `A` | Open Instagram's share dialog |
-| `C` | Open comments |
 
 ### Always-on shortcuts (not rebindable)
 
