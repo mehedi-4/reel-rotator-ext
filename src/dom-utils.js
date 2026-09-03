@@ -171,6 +171,7 @@
       '[role="button"][aria-label="Unlike" i]',
       'svg[aria-label="Like" i]',
       'svg[aria-label="Unlike" i]',
+      '[aria-label*="repost" i]',
       'svg path[d*="16.792"]',
       'svg path[d*="21.35"]',
       'svg path[d*="3.436"]'
@@ -347,13 +348,225 @@
   }
 
   /**
+   * Find the repost button inside a specific DOM subtree.
+   */
+  function findRepostButtonInScope(scope) {
+    if (!scope) return null;
+
+    const exactLabels = [
+      'Repost',
+      'Reposted',
+      'Undo Repost',
+      'Remove Repost',
+      'Remove from Reposts',
+      'Republicar',
+      'Republicado'
+    ];
+    for (const label of exactLabels) {
+      const btn = scope.querySelector(
+        `button[aria-label="${label}" i]:not(#reel-rotate-btn):not([id^="reel-"]), ` +
+        `[role="button"][aria-label="${label}" i]:not(#reel-rotate-btn):not([id^="reel-"]), ` +
+        `svg[aria-label="${label}" i], ` +
+        `[aria-label="${label}" i]:not(#reel-rotate-btn):not([id^="reel-"])`
+      );
+      if (btn) return btn;
+    }
+
+    const prefixBtn = scope.querySelector(
+      `button[aria-label^="Repost" i]:not(#reel-rotate-btn):not([id^="reel-"]), ` +
+      `[role="button"][aria-label^="Repost" i]:not(#reel-rotate-btn):not([id^="reel-"]), ` +
+      `[aria-label^="Repost" i]:not(#reel-rotate-btn):not([id^="reel-"])`
+    );
+    if (prefixBtn) return prefixBtn;
+
+    const fallbackBtn = scope.querySelector(
+      `button[aria-label*="repost" i]:not(#reel-rotate-btn):not([id^="reel-"]), ` +
+      `[role="button"][aria-label*="repost" i]:not(#reel-rotate-btn):not([id^="reel-"]), ` +
+      `svg[aria-label*="repost" i], ` +
+      `[aria-label*="repost" i]:not(#reel-rotate-btn):not([id^="reel-"])`
+    );
+    if (fallbackBtn) return fallbackBtn;
+
+    return null;
+  }
+
+  /**
+   * Find the repost button for a given video.
+   * Looks inside the resolved reel container first, then uses spatial vertical alignment.
+   */
+  function findRepostButtonForVideo(video) {
+    if (!video) return null;
+
+    // 1. Check inside the resolved reel container
+    const container = findReelContainer(video);
+    if (container) {
+      const btn = findRepostButtonInScope(container);
+      if (btn) return btn;
+    }
+
+    // 2. Spatial match: find all repost buttons on the page and select the one
+    // vertically aligned with the active video
+    const vRect = video.getBoundingClientRect();
+    const repostSelectors = [
+      'button[aria-label="Repost" i]',
+      '[role="button"][aria-label="Repost" i]',
+      'button[aria-label="Reposted" i]',
+      '[role="button"][aria-label="Reposted" i]',
+      'button[aria-label="Undo Repost" i]',
+      '[role="button"][aria-label="Undo Repost" i]',
+      'button[aria-label="Remove Repost" i]',
+      '[role="button"][aria-label="Remove Repost" i]',
+      'button[aria-label="Remove from Reposts" i]',
+      '[role="button"][aria-label="Remove from Reposts" i]',
+      'button[aria-label^="Repost" i]',
+      '[role="button"][aria-label^="Repost" i]',
+      'button[aria-label*="repost" i]',
+      '[role="button"][aria-label*="repost" i]',
+      'svg[aria-label*="repost" i]',
+      '[aria-label*="repost" i]'
+    ].join(', ');
+
+    const allCandidates = document.querySelectorAll(repostSelectors);
+    let bestBtn = null;
+    let bestDist = Infinity;
+
+    for (const el of allCandidates) {
+      if (el.id === 'reel-rotate-btn' || el.id?.startsWith('reel-')) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) continue;
+
+      if (r.bottom < vRect.top - 50 || r.top > vRect.bottom + 50) continue;
+
+      const dist = Math.abs(r.top + r.height / 2 - (vRect.top + vRect.height / 2));
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestBtn = el;
+      }
+    }
+
+    return bestBtn;
+  }
+
+  /**
+   * Check for an open confirmation dialog, action menu, or snackbar toast
+   * for removing/undoing a repost, and automatically click the confirmation button.
+   */
+  function tryConfirmRemoveRepost() {
+    const confirmPhrases = [
+      'remove from repost',
+      'remove repost',
+      'delete repost',
+      'undo repost',
+      'deshacer',
+      'eliminar republicaci',
+      'remover dos republicados',
+      'supprimer des republications',
+      'aus reposts entfernen',
+      'repost löschen'
+    ];
+
+    // 1. Search inside open dialogs, menus, and sheets
+    const dialogSelectors = [
+      '[role="dialog"]',
+      '[role="menu"]',
+      'div[aria-modal="true"]',
+      'div[data-bloks-name]'
+    ];
+
+    for (const dSel of dialogSelectors) {
+      const dialogs = document.querySelectorAll(dSel);
+      for (const dialog of dialogs) {
+        const dialogText = (dialog.textContent || '').toLowerCase();
+        const hasRepostContext = dialogText.includes('repost') ||
+                                 dialogText.includes('republic') ||
+                                 dialogText.includes('reshare');
+
+        const buttons = dialog.querySelectorAll('button, [role="button"], [role="menuitem"], a');
+        for (const btn of buttons) {
+          const text = (btn.textContent || '').trim().toLowerCase();
+          const label = (btn.getAttribute('aria-label') || '').toLowerCase();
+
+          // Explicit phrase match
+          for (const phrase of confirmPhrases) {
+            if (text.includes(phrase) || label.includes(phrase)) {
+              return triggerClick(btn);
+            }
+          }
+
+          // If the dialog mentions repost, match action keywords (ignore Cancel/Dismiss)
+          if (hasRepostContext) {
+            const isActionVerb = text === 'remove' || text === 'delete' || text === 'undo' ||
+                                 label === 'remove' || label === 'delete' || label === 'undo';
+            if (isActionVerb) {
+              return triggerClick(btn);
+            }
+          }
+        }
+      }
+    }
+
+    // 2. Check for floating toast or bottom notification banner (e.g. "Reposted ... Undo")
+    const alerts = document.querySelectorAll('div[role="alert"], div[aria-live="polite"], div[aria-live="assertive"]');
+    for (const alert of alerts) {
+      const alertText = (alert.textContent || '').toLowerCase();
+      if (alertText.includes('repost') || alertText.includes('republic')) {
+        const undoBtn = alert.querySelector('button, [role="button"], a');
+        if (undoBtn) {
+          const btnText = (undoBtn.textContent || '').toLowerCase();
+          if (btnText.includes('undo') || btnText.includes('remove') || btnText.includes('deshacer')) {
+            return triggerClick(undoBtn);
+          }
+        }
+      }
+    }
+
+    // 3. Fallback: check any visible button on the page with explicit "remove from repost"
+    const allButtons = document.querySelectorAll('button, [role="button"], [role="menuitem"]');
+    for (const b of allButtons) {
+      if (b.id?.startsWith('reel-')) continue;
+      const t = (b.textContent || '').toLowerCase();
+      for (const phrase of confirmPhrases) {
+        if (t.includes(phrase)) {
+          return triggerClick(b);
+        }
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Watch for a remove-repost confirmation dialog or toast to appear
+   * after clicking the repost button, and automatically confirm it.
+   */
+  function autoConfirmRepostRemoval(onConfirmed) {
+    let attempts = 0;
+    const maxAttempts = 20; // 20 * 50ms = 1000ms window
+    const timer = setInterval(() => {
+      attempts++;
+      if (tryConfirmRemoveRepost()) {
+        clearInterval(timer);
+        if (onConfirmed) onConfirmed();
+        return;
+      }
+      if (attempts >= maxAttempts) {
+        clearInterval(timer);
+      }
+    }, 50);
+  }
+
+  /**
    * Click the matching Instagram action button on the active reel.
    * Returns true if a button was clicked, false otherwise.
    */
   function clickReelButton(video, labelFragments) {
     if (!video) return false;
 
-    const btn = findLikeButtonForVideo(video);
+    const isRepost = (labelFragments || []).some(
+      f => f.toLowerCase().includes('repost')
+    );
+
+    const btn = isRepost ? findRepostButtonForVideo(video) : findLikeButtonForVideo(video);
     if (btn) {
       return triggerClick(btn);
     }
@@ -377,6 +590,8 @@
     findReelContainer,
     triggerClick,
     clickReelButton,
+    tryConfirmRemoveRepost,
+    autoConfirmRepostRemoval,
     isReelsPage,
   };
 })();

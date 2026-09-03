@@ -13,6 +13,7 @@
     prevReel: 'w',
     nextReel: 's',
     react:    'q',
+    repost:   'v',
   };
 
   const inputs = Array.from(document.querySelectorAll('input[data-action]'));

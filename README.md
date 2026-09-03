@@ -12,7 +12,7 @@ Landscape videos on Instagram Reels look tiny and sideways on desktop. You can't
 - **Focus mode** — a dark blurred backdrop with the video centered, fit to the viewport at any rotation.
 - **Reel navigation** — W/S keys, arrow keys, mouse wheel, or trackpad (in both focus mode and normal feed). Rotation carries over to the next reel.
 - **Media controls** in focus mode — Space pauses, M mutes.
-- **Native Instagram like from the keyboard** — Q likes/unlikes the active reel.
+- **Native Instagram actions from the keyboard** — Q likes/unlikes, V reposts the active reel.
 - **Customizable shortcuts** — rebind any letter through a toolbar popup. Changes apply live, no reload.
 - **Auto-sizing** — at any rotation, the video fills the viewport while staying fully visible.
 
@@ -47,6 +47,7 @@ Click the **Reel Rotator** icon in your toolbar to customize. Defaults:
 | `W` | Previous reel (up) |
 | `S` | Next reel (down) |
 | `Q` | React (like / unlike) the active reel |
+| `V` | Repost the active reel |
 
 ### Always-on shortcuts (not rebindable)
 

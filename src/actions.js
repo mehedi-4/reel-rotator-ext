@@ -46,8 +46,46 @@
     }
   }
 
+  /** Keep video playing if it was playing before a dialog or action interrupted it. */
+  function restorePlayback(video) {
+    if (!video || !document.contains(video)) return;
+    [50, 150, 300, 500, 800].forEach((delay) => {
+      setTimeout(() => {
+        if (video && document.contains(video) && video.paused && !video.ended) {
+          video.play().catch(() => {});
+        }
+      }, delay);
+    });
+  }
+
+  /** Toggle repost on the active reel. Native Instagram button toggles repost. */
+  function repost() {
+    const video = getTargetVideo();
+    const wasPlaying = video ? (!video.paused && !video.ended) : false;
+
+    // 1. If an Undo toast or Remove confirmation dialog is already open, confirm it immediately
+    if (RR.domUtils?.tryConfirmRemoveRepost?.()) {
+      if (wasPlaying) restorePlayback(video);
+      return;
+    }
+
+    // 2. Click the reel's Repost / Reposted / Remove Repost button
+    const clicked = clickReelButton(video, ['Repost', 'Reposted', 'Undo Repost', 'Remove Repost']);
+
+    // 3. Watch for a confirmation modal/dialog or undo toast to auto-confirm removal
+    if (clicked) {
+      RR.domUtils?.autoConfirmRepostRemoval?.(() => {
+        if (wasPlaying) restorePlayback(video);
+      });
+      if (wasPlaying) {
+        restorePlayback(video);
+      }
+    }
+  }
+
   // ── Expose ──────────────────────────────────────────────────────────
   RR.actions = {
     reactLike,
+    repost,
   };
 })();

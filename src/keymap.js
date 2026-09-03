@@ -22,6 +22,7 @@
     prevReel:  'w',
     nextReel:  's',
     react:     'q',
+    repost:    'v',
   });
 
   // Working copy. Hydrated from storage on init; updated live thereafter.
@@ -38,6 +39,7 @@
     prevReel:  () => RR.focus.navigate(-1),
     nextReel:  () => RR.focus.navigate(+1),
     react:     () => RR.actions.reactLike(),
+    repost:    () => RR.actions.repost(),
   };
 
   function runAction(action) {
