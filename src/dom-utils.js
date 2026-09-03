@@ -17,6 +17,9 @@
    *   3. Otherwise any first video on the page.
    */
   function findActiveVideo() {
+    if (S.focusMode && S.focusedVideo && document.contains(S.focusedVideo)) {
+      return S.focusedVideo;
+    }
     const videos = document.querySelectorAll('video');
     if (videos.length === 0) return null;
 
@@ -64,104 +67,236 @@
   }
 
   /**
-   * Cache the main scroll container so we don't re-scan every scroll event.
-   * Instagram uses scroll-snap on the reels viewport; we look for that first,
-   * then fall back to `<main>`.
+   * Helper to check if an element is genuinely scrollable vertically.
+   */
+  function isScrollable(el) {
+    if (!el || el === document.body || el === document.documentElement) return false;
+    if (el.scrollHeight <= el.clientHeight + 10) return false;
+    try {
+      const style = window.getComputedStyle(el);
+      const oy = style.overflowY;
+      return oy === 'auto' || oy === 'scroll';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /**
+   * Find the true vertical scroll container for Instagram Reels.
+   * Walks up from the active video to guarantee we find the exact container
+   * that owns the reel's scroll stream, rather than guessing or picking <main>.
    */
   function findScrollContainer() {
-    if (S.scrollContainer && document.contains(S.scrollContainer)) {
+    if (S.scrollContainer && document.contains(S.scrollContainer) && isScrollable(S.scrollContainer)) {
       return S.scrollContainer;
     }
-    const candidates = document.querySelectorAll('div');
+
+    // 1. Walk UP from the active video or original parent (in focus mode)
+    const seed = (S.focusMode && S.focusSavedStyles?._origParent) ||
+                 (S.focusMode ? S.focusedVideo : null) ||
+                 S.rotatedVideo ||
+                 findActiveVideo() ||
+                 document.querySelector('video');
+
+    if (seed) {
+      let el = seed.nodeType === 1 && seed.tagName === 'VIDEO' ? seed.parentElement : seed;
+      while (el && el !== document.body && el !== document.documentElement) {
+        if (isScrollable(el)) {
+          S.scrollContainer = el;
+          return el;
+        }
+        el = el.parentElement;
+      }
+    }
+
+    // 2. Check main and its children/descendants
+    const main = document.querySelector('main, [role="main"]');
+    if (main) {
+      if (isScrollable(main)) {
+        S.scrollContainer = main;
+        return main;
+      }
+      const scrollableInsideMain = main.querySelectorAll('div');
+      for (const div of scrollableInsideMain) {
+        if (isScrollable(div)) {
+          S.scrollContainer = div;
+          return div;
+        }
+      }
+    }
+
+    // 3. Check any div with scrollSnapType or scrollable overflow
+    const candidates = document.querySelectorAll('[style*="scroll-snap"], [style*="overflow"], div');
     for (const div of candidates) {
-      const style = window.getComputedStyle(div);
-      if (
-        style.scrollSnapType &&
-        style.scrollSnapType !== 'none' &&
-        div.scrollHeight > div.clientHeight
-      ) {
+      if (isScrollable(div)) {
         S.scrollContainer = div;
         return div;
       }
     }
-    const main = document.querySelector('main, [role="main"]');
-    if (main) {
-      S.scrollContainer = main;
-      return main;
+
+    // 4. Default to document.scrollingElement
+    if (document.scrollingElement && document.scrollingElement.scrollHeight > window.innerHeight + 10) {
+      return document.scrollingElement;
     }
+
     return null;
   }
 
   /**
-   * Walk up from `video` to the nearest ancestor that holds Like/Comment/Share
-   * buttons. That's the "reel card" Instagram's actions belong to.
-   * Returns `null` if nothing was found (e.g. video was lifted to <body>).
-   *
-   * In focus mode, the video is detached from its reel card and reparented
-   * into <body>. The action buttons are NOT descendants of the video in that
-   * state — they live in the *original* reel container (saved on
-   * `S.focusSavedStyles._origParent`). The caller can pass that in via the
-   * optional `origParent` hint so we can find the buttons in either layout.
+   * Walk up from `video` or `origParent` to the nearest ancestor that holds
+   * Like/Comment/Share buttons. That's the "reel card" Instagram's actions belong to.
    */
   function findReelContainer(video, origParent) {
-    // Hint from focus mode: the original reel card we lifted the video out of.
-    if (origParent && document.contains(origParent)) {
-      const markers = '[aria-label*="ike" i], [aria-label*="omment" i], [aria-label*="hare" i], [aria-label*="end" i]';
-      if (origParent.querySelector(markers)) return origParent;
+    const markers = [
+      '[aria-label*="ike" i]',
+      '[aria-label*="omment" i]',
+      '[aria-label*="hare" i]',
+      '[aria-label*="end" i]',
+      'svg path[d*="16.792"]',
+      'svg path[d*="21.35"]',
+      'svg path[d*="3.436"]'
+    ].join(', ');
+
+    // 1. In focus mode (or when origParent hint given): walk UP from origParent
+    const focusParent = origParent || (S.focusMode && S.focusSavedStyles?._origParent);
+    if (focusParent && document.contains(focusParent)) {
+      let el = focusParent;
+      while (el && el !== document.body) {
+        if (el.querySelector(markers)) return el;
+        el = el.parentElement;
+      }
     }
-    if (!video) return null;
-    const markers = '[aria-label*="ike" i], [aria-label*="omment" i], [aria-label*="hare" i], [aria-label*="end" i]';
-    let el = video.parentElement;
-    while (el && el !== document.body) {
-      if (el.querySelector(markers)) return el;
-      el = el.parentElement;
+
+    // 2. Walk UP from video.parentElement if video is in the feed (not <body>)
+    if (video && video.parentElement && video.parentElement !== document.body && document.contains(video)) {
+      let el = video.parentElement;
+      while (el && el !== document.body) {
+        if (el.querySelector(markers)) return el;
+        el = el.parentElement;
+      }
     }
+
+    // 3. Fallback: find the visible reel card closest to viewport center
+    const articles = document.querySelectorAll('article, [role="article"], section');
+    const viewportCenter = window.innerHeight / 2;
+    let bestArticle = null;
+    let bestDist = Infinity;
+    for (const art of articles) {
+      if (!art.querySelector(markers)) continue;
+      const rect = art.getBoundingClientRect();
+      if (rect.height < 200 || rect.bottom < 0 || rect.top > window.innerHeight) continue;
+      const dist = Math.abs(rect.top + rect.height / 2 - viewportCenter);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestArticle = art;
+      }
+    }
+    if (bestArticle) return bestArticle;
+
     return null;
   }
 
   /**
-   * Click the first matching Instagram action button on the active reel.
-   * Tries each label fragment in order — first hit wins.
+   * Trigger a click on an element, ensuring React synthetic event handlers
+   * on button/role="button" ancestors receive the proper pointer/mouse sequence.
+   */
+  function triggerClick(element) {
+    if (!element) return false;
+
+    const clickable = element.closest('button, [role="button"]') || element;
+    const eventOptions = {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      buttons: 1,
+    };
+
+    try { clickable.dispatchEvent(new PointerEvent('pointerdown', eventOptions)); } catch (_) {}
+    try { clickable.dispatchEvent(new MouseEvent('mousedown', eventOptions)); } catch (_) {}
+    try { clickable.dispatchEvent(new PointerEvent('pointerup', eventOptions)); } catch (_) {}
+    try { clickable.dispatchEvent(new MouseEvent('mouseup', eventOptions)); } catch (_) {}
+
+    try {
+      clickable.click();
+    } catch (_) {
+      try { element.click(); } catch (_) {}
+    }
+
+    return true;
+  }
+
+  /**
+   * Click the matching Instagram action button on the active reel.
+   * Tries exact matches first, then prefix matches, then heart SVG paths,
+   * then filtered substring matches.
    * Returns true if a button was clicked, false otherwise.
-   *
-   * Strategy:
-   *   1. If focus-mode is active, scope search to the original reel card
-   *      we lifted the video out of (`S.focusSavedStyles._origParent`).
-   *      The Like/Comment/Share buttons live there, NOT as descendants
-   *      of the lifted video. (BUG FIX: previously fell through to
-   *      document-wide search, which would click a button on a
-   *      different reel in the underlying feed.)
-   *   2. Otherwise walk up from the video to find its reel card.
-   *   3. As a last resort — and only outside focus mode — fall back to
-   *      document-wide search (single-reel pages, edge cases).
    */
   function clickReelButton(video, labelFragments) {
     const S = RR.state;
     let scope = null;
 
     if (S.focusMode && S.focusSavedStyles && S.focusSavedStyles._origParent) {
-      // In focus mode the lifted video's action buttons live in the
-      // *original* reel container we saved on entry. If that's gone
-      // (Instagram recycled the node), this returns null and the call
-      // fails — we deliberately do NOT fall back to document, because
-      // clicking the wrong reel's button would be worse than no-op.
       scope = findReelContainer(video, S.focusSavedStyles._origParent);
     } else {
       scope = findReelContainer(video);
     }
-    if (!scope && !S.focusMode) scope = document;
+    if (!scope) scope = document;
 
-    if (!scope) return false;
+    const isLikeAction = labelFragments.some(
+      f => f.toLowerCase() === 'like' || f.toLowerCase() === 'unlike'
+    );
 
+    // Strategy 1: Exact aria-label match on button or SVG (avoids matching like counts)
     for (const frag of labelFragments) {
-      // :not(#reel-rotate-btn) guards against accidentally matching our own UI.
-      const selector = `[aria-label*="${frag}" i]:not(#reel-rotate-btn):not([id^="reel-"])`;
-      const btn = scope.querySelector(selector);
-      if (btn) {
-        btn.click();
-        return true;
+      const exactBtn = scope.querySelector(
+        `button[aria-label="${frag}" i]:not(#reel-rotate-btn):not([id^="reel-"]), ` +
+        `[role="button"][aria-label="${frag}" i]:not(#reel-rotate-btn):not([id^="reel-"]), ` +
+        `svg[aria-label="${frag}" i], ` +
+        `[aria-label="${frag}" i]:not(#reel-rotate-btn):not([id^="reel-"])`
+      );
+      if (exactBtn) {
+        return triggerClick(exactBtn);
       }
     }
+
+    // Strategy 2: Starts-with match (e.g. "Like this reel", "Unlike this post")
+    for (const frag of labelFragments) {
+      const prefixBtn = scope.querySelector(
+        `button[aria-label^="${frag} " i]:not(#reel-rotate-btn):not([id^="reel-"]), ` +
+        `[role="button"][aria-label^="${frag} " i]:not(#reel-rotate-btn):not([id^="reel-"]), ` +
+        `svg[aria-label^="${frag} " i], ` +
+        `[aria-label^="${frag} " i]:not(#reel-rotate-btn):not([id^="reel-"])`
+      );
+      if (prefixBtn) {
+        return triggerClick(prefixBtn);
+      }
+    }
+
+    // Strategy 3: For like/unlike, locate by Instagram's heart icon SVG path signature.
+    // Works reliably across all localized languages.
+    if (isLikeAction) {
+      const heartPath = scope.querySelector(
+        'svg path[d*="16.792"], svg path[d*="M16.792"], svg path[d*="21.35"], svg path[d*="3.436"]'
+      );
+      if (heartPath) {
+        return triggerClick(heartPath);
+      }
+    }
+
+    // Strategy 4: Fallback substring match, filtering out like counts and attribution
+    for (const frag of labelFragments) {
+      const candidates = scope.querySelectorAll(
+        `[aria-label*="${frag}" i]:not(#reel-rotate-btn):not([id^="reel-"])`
+      );
+      for (const el of candidates) {
+        const label = (el.getAttribute('aria-label') || '').toLowerCase();
+        if (label.includes('likes') && !label.includes('unlike')) continue;
+        if (label.includes('liked by')) continue;
+        if (label.includes('count')) continue;
+        return triggerClick(el);
+      }
+    }
+
     return false;
   }
 
@@ -179,6 +314,7 @@
     getVideoContainer,
     findScrollContainer,
     findReelContainer,
+    triggerClick,
     clickReelButton,
     isReelsPage,
   };

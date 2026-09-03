@@ -305,46 +305,72 @@
     RR.ui?.setFocusButtonActive?.(false);
   }
 
-  // ── Focus-mode navigation ─────────────────────────────────────────────
+  // ── Reel navigation (focus mode & normal feed) ─────────────────────────
   // direction: 1 = next reel, -1 = previous reel
   function navigate(direction) {
-    if (!S.focusMode || S.focusNavigating) return;
+    if (S.focusMode) {
+      if (S.focusNavigating) return;
 
+      const now = Date.now();
+      if (now - S.lastNavTime < NAV_COOLDOWN) return;
+      S.lastNavTime = now;
+      S.focusNavigating = true;
+
+      const prevVideo = S.focusedVideo;
+      const keptRotation = S.rotation;
+
+      // Drop the video back into the feed so the page can scroll normally.
+      restoreVideoFromFocus();
+      if (S.rotatedVideo) resetRotation(S.rotatedVideo);
+      else if (prevVideo) {
+        prevVideo.style.transform = '';
+        prevVideo.style.transformOrigin = '';
+        prevVideo.style.objectFit = '';
+      }
+
+      const container = findScrollContainer();
+      const step = (container ? container.clientHeight : window.innerHeight) * direction;
+      if (container) container.scrollBy({ top: step, behavior: 'smooth' });
+      else window.scrollBy({ top: step, behavior: 'smooth' });
+
+      waitForNextVideo(prevVideo, (video) => {
+        S.focusNavigating = false;
+        if (!S.focusMode || !video) return;
+
+        // Re-arm the rotation before focusing: reapplyBaseline uses S.rotation.
+        if (keptRotation !== 0) {
+          S.rotation = keptRotation;
+          S.rotatedVideo = video;
+          RR.ui?.updateButtonState?.();
+        }
+
+        applyFocusStyles(video);
+      });
+      return;
+    }
+
+    // Non-focus mode navigation
     const now = Date.now();
-    if (now - S.lastNavTime < NAV_COOLDOWN) return;
+    if (now - S.lastNavTime < 350) return;
     S.lastNavTime = now;
-    S.focusNavigating = true;
 
-    const prevVideo = S.focusedVideo;
-    const keptRotation = S.rotation;
+    scrollFeed(direction);
+  }
 
-    // Drop the video back into the feed so the page can scroll normally.
-    restoreVideoFromFocus();
-    if (S.rotatedVideo) resetRotation(S.rotatedVideo);
-    else if (prevVideo) {
-      prevVideo.style.transform = '';
-      prevVideo.style.transformOrigin = '';
-      prevVideo.style.objectFit = '';
+  function scrollFeed(direction) {
+    if (S.rotatedVideo) {
+      resetRotation(S.rotatedVideo);
     }
 
     const container = findScrollContainer();
-    const step = (container ? container.clientHeight : window.innerHeight) * direction;
-    if (container) container.scrollBy({ top: step, behavior: 'smooth' });
-    else window.scrollBy({ top: step, behavior: 'smooth' });
+    const isCustomContainer = container && container !== document.documentElement && container !== document.body;
+    const step = (isCustomContainer ? container.clientHeight : window.innerHeight) * direction;
 
-    waitForNextVideo(prevVideo, (video) => {
-      S.focusNavigating = false;
-      if (!S.focusMode || !video) return;
-
-      // Re-arm the rotation before focusing: reapplyBaseline uses S.rotation.
-      if (keptRotation !== 0) {
-        S.rotation = keptRotation;
-        S.rotatedVideo = video;
-        RR.ui?.updateButtonState?.();
-      }
-
-      applyFocusStyles(video);
-    });
+    if (isCustomContainer) {
+      container.scrollBy({ top: step, behavior: 'smooth' });
+    } else {
+      window.scrollBy({ top: step, behavior: 'smooth' });
+    }
   }
 
   /**

@@ -12,28 +12,43 @@
   const RR = window.__reelRotator;
   const { findActiveVideo, clickReelButton } = RR.domUtils;
 
+  function getTargetVideo() {
+    const S = RR.state;
+    if (S.focusMode && S.focusedVideo && document.contains(S.focusedVideo)) {
+      return S.focusedVideo;
+    }
+    if (S.rotatedVideo && document.contains(S.rotatedVideo)) {
+      return S.rotatedVideo;
+    }
+    return findActiveVideo();
+  }
+
   /** Toggle like on the active reel. Native Instagram button is already a toggle. */
   function reactLike() {
-    const video = findActiveVideo();
-    if (!video) return;
-    // Try "Like" first; if the reel is already liked the aria-label flips to
-    // "Unlike" — both match, but matching is case-insensitive substring so we
-    // pass a list and let clickReelButton take the first hit.
-    clickReelButton(video, ['Like', 'Unlike']);
+    const video = getTargetVideo();
+    const clicked = clickReelButton(video, ['Like', 'Unlike']);
+    if (!clicked && video) {
+      // Fallback: simulate double click on the active video
+      try {
+        const dblEvent = new MouseEvent('dblclick', {
+          bubbles: true,
+          cancelable: true,
+          view: window,
+        });
+        video.dispatchEvent(dblEvent);
+      } catch (_) {}
+    }
   }
 
   /** Open Instagram's native share/send dialog. */
   function openSend() {
-    const video = findActiveVideo();
-    if (!video) return;
-    // "Share" is the older label; newer Instagram builds use "Send".
+    const video = getTargetVideo();
     clickReelButton(video, ['Share', 'Send']);
   }
 
   /** Open Instagram's native comment composer / panel. */
   function openComment() {
-    const video = findActiveVideo();
-    if (!video) return;
+    const video = getTargetVideo();
     clickReelButton(video, ['Comment']);
   }
 

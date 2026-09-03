@@ -11,9 +11,9 @@
     rotateCW: 'e',
     focus:    'f',
     prevReel: 'w',
-    nextReel: 'a',
+    nextReel: 's',
     react:    'q',
-    send:     's',
+    send:     'a',
     comment:  'c',
   };
 
@@ -27,7 +27,13 @@
 
   function loadKeymap() {
     chrome.storage.local.get({ keymap: DEFAULTS }, (res) => {
-      const km = { ...DEFAULTS, ...(res.keymap || {}) };
+      const stored = res.keymap || {};
+      if (stored.nextReel === 'a' && stored.send === 's') {
+        stored.nextReel = 's';
+        stored.send = 'a';
+        try { chrome.storage.local.set({ keymap: stored }); } catch (_) {}
+      }
+      const km = { ...DEFAULTS, ...stored };
       inputs.forEach((inp) => {
         inp.value = (km[inp.dataset.action] || '').toLowerCase();
       });

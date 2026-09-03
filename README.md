@@ -10,9 +10,9 @@ Landscape videos on Instagram Reels look tiny and sideways on desktop. You can't
 
 - **Rotate any Reel** 90° counter-clockwise (R) or clockwise (E) per press (cycles back to 0° after a full turn).
 - **Focus mode** — a dark blurred backdrop with the video centered, fit to the viewport at any rotation.
-- **Focus-mode reel navigation** — arrow keys, W/A keys, mouse wheel, or trackpad. Rotation carries over to the next reel.
+- **Reel navigation** — W/S keys, arrow keys, mouse wheel, or trackpad (in both focus mode and normal feed). Rotation carries over to the next reel.
 - **Media controls** in focus mode — Space pauses, M mutes.
-- **Native Instagram actions from the keyboard** — Q likes/unlikes, S opens the share dialog, C opens comments.
+- **Native Instagram actions from the keyboard** — Q likes/unlikes, A opens the share dialog, C opens comments.
 - **Customizable shortcuts** — rebind any letter through a toolbar popup. Changes apply live, no reload.
 - **Auto-sizing** — at any rotation, the video fills the viewport while staying fully visible.
 
@@ -44,10 +44,10 @@ Click the **Reel Rotator** icon in your toolbar to customize. Defaults:
 | `R` | Rotate video 90° counter-clockwise |
 | `E` | Rotate video 90° clockwise |
 | `F` | Focus mode (toggle) |
-| `W` | Previous reel — *while in focus mode* |
-| `A` | Next reel — *while in focus mode* |
+| `W` | Previous reel (up) |
+| `S` | Next reel (down) |
 | `Q` | React (like / unlike) the active reel |
-| `S` | Open Instagram's share dialog |
+| `A` | Open Instagram's share dialog |
 | `C` | Open comments |
 
 ### Always-on shortcuts (not rebindable)

@@ -20,9 +20,9 @@
     rotateCW:  'e',
     focus:     'f',
     prevReel:  'w',
-    nextReel:  'a',
+    nextReel:  's',
     react:     'q',
-    send:      's',
+    send:      'a',
     comment:   'c',
   });
 
@@ -37,8 +37,8 @@
     rotateCW:  () => RR.rotation.handleRotate(90),
     rotateCCW: () => RR.rotation.handleRotate(-90),
     focus:     () => RR.focus.toggle(),
-    prevReel:  () => { if (S.focusMode) RR.focus.navigate(-1); },
-    nextReel:  () => { if (S.focusMode) RR.focus.navigate(+1); },
+    prevReel:  () => RR.focus.navigate(-1),
+    nextReel:  () => RR.focus.navigate(+1),
     react:     () => RR.actions.reactLike(),
     send:      () => RR.actions.openSend(),
     comment:   () => RR.actions.openComment(),
@@ -53,7 +53,14 @@
   function hydrate(callback) {
     try {
       chrome.storage.local.get({ keymap: DEFAULT_KEYMAP }, (res) => {
-        keymap = { ...DEFAULT_KEYMAP, ...(res.keymap || {}) };
+        const stored = res.keymap || {};
+        // Auto-migrate old defaults where nextReel was 'a' and send was 's'
+        if (stored.nextReel === 'a' && stored.send === 's') {
+          stored.nextReel = 's';
+          stored.send = 'a';
+          try { chrome.storage.local.set({ keymap: stored }); } catch (_) {}
+        }
+        keymap = { ...DEFAULT_KEYMAP, ...stored };
         if (callback) callback();
       });
     } catch (_) {
