@@ -15,7 +15,7 @@
   // Mutable by reference; nothing else should declare duplicates of these.
   const state = {
     // Rotation
-    rotation: 0,                  // 0, -90, -180, -270 (degrees, CCW positive)
+    rotation: 0,                  // 0, ±90, ±180, ±270 (degrees; negative = CCW, positive = CW)
     rotatedVideo: null,           // the currently-rotated <video>
 
     // Focus mode

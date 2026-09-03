@@ -107,10 +107,11 @@
   }
 
   /**
-   * Entry point. Cycles rotation -90° per press; wraps to 0° after a full turn.
+   * Entry point. Cycles rotation by delta (-90° by default for anti-clockwise,
+   * +90° for clockwise) per press; wraps to 0° after a full turn.
    * Dispatches to applyRotation or applyRotationInFocus depending on state.
    */
-  function handleRotate() {
+  function handleRotate(delta = -90) {
     const video = findActiveVideo();
     if (!video) return;
 
@@ -118,8 +119,11 @@
       resetRotation(S.rotatedVideo);
     }
 
-    S.rotation = S.rotation - 90;
-    if (S.rotation <= -360) S.rotation = 0;
+    let nextRotation = S.rotation + delta;
+    if (Math.abs(nextRotation) >= 360) {
+      nextRotation = 0;
+    }
+    S.rotation = nextRotation;
 
     if (S.rotation === 0) {
       resetRotation(video);
@@ -138,6 +142,8 @@
   // ── Expose ──────────────────────────────────────────────────────────
   RR.rotation = {
     handleRotate,
+    handleRotateCW: () => handleRotate(90),
+    handleRotateCCW: () => handleRotate(-90),
     applyRotation,
     applyRotationInFocus,
     resetRotation,

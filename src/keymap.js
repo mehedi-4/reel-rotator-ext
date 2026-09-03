@@ -17,6 +17,7 @@
   // Single letters, lowercase. Stored & compared case-insensitively.
   const DEFAULT_KEYMAP = Object.freeze({
     rotate:    'r',
+    rotateCW:  'e',
     focus:     'f',
     prevReel:  'w',
     nextReel:  'a',
@@ -32,13 +33,15 @@
   // Maps an action name → the function that performs it.
   // Reads S.focusMode at call time so it's always current.
   const ACTION_HANDLERS = {
-    rotate:   () => RR.rotation.handleRotate(),
-    focus:    () => RR.focus.toggle(),
-    prevReel: () => { if (S.focusMode) RR.focus.navigate(-1); },
-    nextReel: () => { if (S.focusMode) RR.focus.navigate(+1); },
-    react:    () => RR.actions.reactLike(),
-    send:     () => RR.actions.openSend(),
-    comment:  () => RR.actions.openComment(),
+    rotate:    () => RR.rotation.handleRotate(-90),
+    rotateCW:  () => RR.rotation.handleRotate(90),
+    rotateCCW: () => RR.rotation.handleRotate(-90),
+    focus:     () => RR.focus.toggle(),
+    prevReel:  () => { if (S.focusMode) RR.focus.navigate(-1); },
+    nextReel:  () => { if (S.focusMode) RR.focus.navigate(+1); },
+    react:     () => RR.actions.reactLike(),
+    send:      () => RR.actions.openSend(),
+    comment:   () => RR.actions.openComment(),
   };
 
   function runAction(action) {

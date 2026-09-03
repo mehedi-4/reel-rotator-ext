@@ -8,7 +8,7 @@ Landscape videos on Instagram Reels look tiny and sideways on desktop. You can't
 
 ## Features
 
-- **Rotate any Reel** 90° counter-clockwise per press (cycles back to 0° after a full turn).
+- **Rotate any Reel** 90° counter-clockwise (R) or clockwise (E) per press (cycles back to 0° after a full turn).
 - **Focus mode** — a dark blurred backdrop with the video centered, fit to the viewport at any rotation.
 - **Focus-mode reel navigation** — arrow keys, W/A keys, mouse wheel, or trackpad. Rotation carries over to the next reel.
 - **Media controls** in focus mode — Space pauses, M mutes.
@@ -42,6 +42,7 @@ Click the **Reel Rotator** icon in your toolbar to customize. Defaults:
 | Key | Action |
 |-----|--------|
 | `R` | Rotate video 90° counter-clockwise |
+| `E` | Rotate video 90° clockwise |
 | `F` | Focus mode (toggle) |
 | `W` | Previous reel — *while in focus mode* |
 | `A` | Next reel — *while in focus mode* |

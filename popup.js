@@ -8,6 +8,7 @@
   // Same constants as src/keymap.js — kept in sync by convention.
   const DEFAULTS = {
     rotate:   'r',
+    rotateCW: 'e',
     focus:    'f',
     prevReel: 'w',
     nextReel: 'a',

@@ -23,7 +23,7 @@
 
     S.btn = document.createElement('button');
     S.btn.id = 'reel-rotate-btn';
-    S.btn.title = 'Rotate (R) · Focus (F)';
+    S.btn.title = 'Rotate CCW (R) · CW (E) · Focus (F)';
     S.btn.innerHTML = '↻';
 
     S.degreeBadge = document.createElement('span');
