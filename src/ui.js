@@ -184,21 +184,12 @@
       }
 
       // If user has set an audio preference (S.userMuted !== null) and queue is not playing:
-      // ensure the newly playing reel plays with that preference and syncs the native button.
+      // ensure the newly playing reel plays with that preference.
       if (vid.id !== 'reel-queue-video' && S.userMuted !== null && document.documentElement?.dataset?.rrQueuePlaying !== '1') {
         if (S.userMuted === false) {
           if (vid.muted) {
             vid.muted = false;
           }
-          // Verify and click native audio button if Instagram started the new reel in muted state
-          setTimeout(() => {
-            if (S.userMuted === false && document.documentElement?.dataset?.rrQueuePlaying !== '1') {
-              const audioBtn = RR.domUtils?.findAudioButtonForVideo?.(vid);
-              if (audioBtn && RR.domUtils?.isAudioButtonMuted?.(audioBtn, vid)) {
-                RR.domUtils.triggerClick(audioBtn);
-              }
-            }
-          }, 100);
         } else if (S.userMuted === true) {
           if (!vid.muted) {
             vid.muted = true;

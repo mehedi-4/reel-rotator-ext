@@ -164,34 +164,52 @@
    * leaks into the outer feed.
    */
   function findReelContainer(video, origParent) {
-    const likeMarker = [
+    const focusParent = origParent || (S.focusMode && S.focusSavedStyles?._origParent);
+    const startEl = focusParent || (video && video.parentElement !== document.body ? video : null);
+
+    // 1. Direct semantic container check (works across all Instagram versions)
+    if (startEl && document.contains(startEl)) {
+      const semantic = startEl.closest('article, [role="article"], div[style*="scroll-snap"]');
+      if (semantic && semantic !== document.body && !isScrollable(semantic)) {
+        return semantic;
+      }
+    }
+
+    const reelMarker = [
       'button[aria-label="Like" i]',
       '[role="button"][aria-label="Like" i]',
       'button[aria-label="Unlike" i]',
       '[role="button"][aria-label="Unlike" i]',
+      '[aria-label*="like" i]',
+      '[aria-label*="liked" i]',
       'svg[aria-label="Like" i]',
       'svg[aria-label="Unlike" i]',
+      'button[aria-label*="comment" i]',
+      '[role="button"][aria-label*="comment" i]',
+      'button[aria-label*="share" i]',
+      '[role="button"][aria-label*="share" i]',
       '[aria-label*="repost" i]',
       'svg path[d*="16.792"]',
       'svg path[d*="21.35"]',
-      'svg path[d*="3.436"]'
+      'svg path[d*="3.436"]',
+      'svg path[d*="34.6"]',
+      'svg path[d*="M34.6"]'
     ].join(', ');
 
-    // 1. In focus mode (or when origParent hint given): walk UP from origParent
-    const focusParent = origParent || (S.focusMode && S.focusSavedStyles?._origParent);
+    // 2. In focus mode (or when origParent hint given): walk UP from origParent
     if (focusParent && document.contains(focusParent)) {
       let el = focusParent;
       while (el && el !== document.body && !isScrollable(el)) {
-        if (el.querySelector(likeMarker)) return el;
+        if (el.querySelector(reelMarker)) return el;
         el = el.parentElement;
       }
     }
 
-    // 2. Walk UP from video.parentElement if video is in the feed (not <body>)
+    // 3. Walk UP from video.parentElement if video is in the feed (not <body>)
     if (video && video.parentElement && video.parentElement !== document.body && document.contains(video)) {
       let el = video.parentElement;
       while (el && el !== document.body && !isScrollable(el)) {
-        if (el.querySelector(likeMarker)) return el;
+        if (el.querySelector(reelMarker)) return el;
         el = el.parentElement;
       }
     }
@@ -249,10 +267,14 @@
       `[role="button"][aria-label="Like" i]:not(#reel-rotate-btn):not([id^="reel-"]), ` +
       `button[aria-label="Unlike" i]:not(#reel-rotate-btn):not([id^="reel-"]), ` +
       `[role="button"][aria-label="Unlike" i]:not(#reel-rotate-btn):not([id^="reel-"]), ` +
+      `button[aria-label="Liked" i]:not(#reel-rotate-btn):not([id^="reel-"]), ` +
+      `[role="button"][aria-label="Liked" i]:not(#reel-rotate-btn):not([id^="reel-"]), ` +
       `svg[aria-label="Like" i], ` +
       `svg[aria-label="Unlike" i], ` +
+      `svg[aria-label="Liked" i], ` +
       `[aria-label="Like" i]:not(#reel-rotate-btn):not([id^="reel-"]), ` +
-      `[aria-label="Unlike" i]:not(#reel-rotate-btn):not([id^="reel-"])`
+      `[aria-label="Unlike" i]:not(#reel-rotate-btn):not([id^="reel-"]), ` +
+      `[aria-label="Liked" i]:not(#reel-rotate-btn):not([id^="reel-"])`
     );
     if (exactBtn) return exactBtn;
 
@@ -267,9 +289,9 @@
     );
     if (prefixBtn) return prefixBtn;
 
-    // Strategy 3: Heart icon SVG path signature (works across all languages)
+    // Strategy 3: Heart icon SVG path signature (works across all languages, outline & solid)
     const heartPath = scope.querySelector(
-      'svg path[d*="16.792"], svg path[d*="M16.792"], svg path[d*="21.35"], svg path[d*="3.436"]'
+      'svg path[d*="16.792"], svg path[d*="M16.792"], svg path[d*="21.35"], svg path[d*="3.436"], svg path[d*="34.6"], svg path[d*="M34.6"]'
     );
     if (heartPath) return heartPath;
 
@@ -312,17 +334,23 @@
       '[role="button"][aria-label="Like" i]',
       'button[aria-label="Unlike" i]',
       '[role="button"][aria-label="Unlike" i]',
+      'button[aria-label="Liked" i]',
+      '[role="button"][aria-label="Liked" i]',
       'svg[aria-label="Like" i]',
       'svg[aria-label="Unlike" i]',
+      'svg[aria-label="Liked" i]',
       '[aria-label="Like" i]',
       '[aria-label="Unlike" i]',
+      '[aria-label="Liked" i]',
       'button[aria-label^="Like " i]',
       '[role="button"][aria-label^="Like " i]',
       'button[aria-label^="Unlike " i]',
       '[role="button"][aria-label^="Unlike " i]',
       'svg path[d*="16.792"]',
       'svg path[d*="21.35"]',
-      'svg path[d*="3.436"]'
+      'svg path[d*="3.436"]',
+      'svg path[d*="34.6"]',
+      'svg path[d*="M34.6"]'
     ].join(', ');
 
     const allCandidates = document.querySelectorAll(likeSelectors);
@@ -503,17 +531,27 @@
         // Must be located in bottom-right region of the reel
         if (r.left < vRect.left + vRect.width * 0.35) continue;
         if (r.top < vRect.top + vRect.height * 0.35) continue;
-        if (r.right > vRect.right + 120 || r.bottom > vRect.bottom + 120) continue;
+        if (r.right > vRect.right + 15 || r.bottom > vRect.bottom + 15) continue;
 
-        // Skip non-audio action buttons
+        // Skip non-audio action and navigation buttons
         const label = (btn.getAttribute('aria-label') || '').toLowerCase();
         const text = (btn.textContent || '').toLowerCase();
-        if (label.includes('like') || label.includes('unlike') || label.includes('comment') ||
-            label.includes('share') || label.includes('direct') || label.includes('repost') ||
-            label.includes('save') || label.includes('bookmark') || label.includes('more') ||
-            label.includes('option') || text.includes('follow') || text.includes('profile')) {
+        if (label.includes('like') || label.includes('unlike') || label.includes('liked') ||
+            label.includes('comment') || label.includes('share') || label.includes('direct') ||
+            label.includes('repost') || label.includes('save') || label.includes('bookmark') ||
+            label.includes('more') || label.includes('option') || label.includes('next') ||
+            label.includes('prev') || label.includes('previous') || label.includes('arrow') ||
+            label.includes('chevron') || label.includes('down') || label.includes('up') ||
+            label.includes('scroll') || label.includes('nav') || text.includes('follow') ||
+            text.includes('profile')) {
           continue;
         }
+
+        // If button has an aria-label, verify it contains an audio keyword
+        const hasAudioWord = label.includes('audio') || label.includes('mute') || label.includes('sound') ||
+                             label.includes('volume') || label.includes('silenc') || label.includes('speaker') ||
+                             label.includes('stumm') || label.includes('ton');
+        if (label && !hasAudioWord) continue;
 
         if (!btn.querySelector('svg') && !btn.matches('svg')) continue;
 
@@ -588,6 +626,12 @@
       const r = clickable.getBoundingClientRect();
       if (r.width === 0 || r.height === 0) continue;
 
+      // Filter out navigation labels
+      const label = (clickable.getAttribute('aria-label') || '').toLowerCase();
+      if (label.includes('next') || label.includes('prev') || label.includes('previous') ||
+          label.includes('arrow') || label.includes('chevron') || label.includes('down') ||
+          label.includes('up') || label.includes('scroll') || label.includes('nav')) continue;
+
       // Must vertically overlap active reel
       if (r.bottom < vRect.top - 60 || r.top > vRect.bottom + 60) continue;
 
@@ -612,13 +656,24 @@
       const r = btn.getBoundingClientRect();
       if (r.width < 16 || r.height < 16 || r.width > 110 || r.height > 110) continue;
       if (r.left < vRect.left + vRect.width * 0.35 || r.top < vRect.top + vRect.height * 0.35) continue;
-      if (r.right > vRect.right + 120 || r.bottom > vRect.bottom + 120) continue;
+      if (r.right > vRect.right + 15 || r.bottom > vRect.bottom + 15) continue;
 
       const label = (btn.getAttribute('aria-label') || '').toLowerCase();
-      if (label.includes('like') || label.includes('comment') || label.includes('share') ||
-          label.includes('repost') || label.includes('save') || label.includes('more') || label.includes('option')) {
+      if (label.includes('like') || label.includes('unlike') || label.includes('liked') ||
+          label.includes('comment') || label.includes('share') || label.includes('repost') ||
+          label.includes('save') || label.includes('more') || label.includes('option') ||
+          label.includes('next') || label.includes('prev') || label.includes('previous') ||
+          label.includes('arrow') || label.includes('chevron') || label.includes('down') ||
+          label.includes('up') || label.includes('scroll') || label.includes('nav') ||
+          label.includes('follow') || label.includes('profile')) {
         continue;
       }
+
+      // If button has an aria-label, verify it contains an audio keyword
+      const hasAudioWord = label.includes('audio') || label.includes('mute') || label.includes('sound') ||
+                           label.includes('volume') || label.includes('silenc') || label.includes('speaker') ||
+                           label.includes('stumm') || label.includes('ton');
+      if (label && !hasAudioWord) continue;
 
       if (!btn.querySelector('svg') && !btn.matches('svg')) continue;
 
@@ -663,11 +718,14 @@
       ) {
         return false;
       }
+      // If button was provided but contains no recognized audio mute labels,
+      // never guess that it is muted.
+      return false;
     }
     if (video) {
       return video.muted;
     }
-    return true;
+    return false;
   }
 
   /**

@@ -301,6 +301,10 @@
       const clickable = el.closest('button, [role="button"]') || el;
       const r = clickable.getBoundingClientRect();
       if (r.width === 0 || r.height === 0) continue;
+      const label = (clickable.getAttribute('aria-label') || '').toLowerCase();
+      if (label.includes('next') || label.includes('prev') || label.includes('previous') ||
+          label.includes('arrow') || label.includes('chevron') || label.includes('down') ||
+          label.includes('up') || label.includes('scroll') || label.includes('nav')) continue;
       if (r.bottom < vRect.top - 60 || r.top > vRect.bottom + 60) continue;
       const dist = Math.abs(r.top + r.height / 2 - (vRect.top + vRect.height / 2));
       if (dist < bestDist) {
