@@ -16,13 +16,16 @@
   // ── Default keymap ────────────────────────────────────────────────────
   // Single letters, lowercase. Stored & compared case-insensitively.
   const DEFAULT_KEYMAP = Object.freeze({
-    rotate:    'r',
-    rotateCW:  'e',
-    focus:     'f',
-    prevReel:  'w',
-    nextReel:  's',
-    react:     'q',
-    repost:    'v',
+    rotate:      'r',
+    rotateCW:    'e',
+    focus:       'f',
+    prevReel:    'w',
+    nextReel:    's',
+    react:       'q',
+    repost:      'v',
+    addToQueue:  'd',
+    toggleAudio: 't',
+    toggleQueue: 'g',
   });
 
   // Working copy. Hydrated from storage on init; updated live thereafter.
@@ -31,15 +34,84 @@
   // ── Action dispatcher ─────────────────────────────────────────────────
   // Maps an action name → the function that performs it.
   // Reads S.focusMode at call time so it's always current.
+  function isMouseOverQueue() {
+    try {
+      const panel = document.getElementById('reel-queue-panel');
+      return !!(panel && panel.matches(':hover'));
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function isQueueActive() {
+    if (S.focusMode && S.focusedVideo === RR.queue?.getVideoEl?.()) {
+      return true;
+    }
+    return !!(RR.queue?.isQueuePlaying?.());
+  }
+
   const ACTION_HANDLERS = {
-    rotate:    () => RR.rotation.handleRotate(-90),
-    rotateCW:  () => RR.rotation.handleRotate(90),
-    rotateCCW: () => RR.rotation.handleRotate(-90),
-    focus:     () => RR.focus.toggle(),
-    prevReel:  () => RR.focus.navigate(-1),
-    nextReel:  () => RR.focus.navigate(+1),
-    react:     () => RR.actions.reactLike(),
-    repost:    () => RR.actions.repost(),
+    rotate:      () => {
+      if (isQueueActive() || isMouseOverQueue()) {
+        RR.queue?.rotateActiveQueueItem?.(-90);
+      } else {
+        RR.rotation.handleRotate(-90);
+      }
+    },
+    rotateCW:    () => {
+      if (isQueueActive() || isMouseOverQueue()) {
+        RR.queue?.rotateActiveQueueItem?.(90);
+      } else {
+        RR.rotation.handleRotate(90);
+      }
+    },
+    rotateCCW:   () => {
+      if (isQueueActive() || isMouseOverQueue()) {
+        RR.queue?.rotateActiveQueueItem?.(-90);
+      } else {
+        RR.rotation.handleRotate(-90);
+      }
+    },
+    focus:       () => {
+      if (S.focusMode) {
+        RR.focus.exit();
+      } else if (isQueueActive() || isMouseOverQueue()) {
+        RR.focus.toggle(RR.queue?.getVideoEl?.());
+      } else {
+        RR.focus.toggle();
+      }
+    },
+    prevReel:    () => {
+      if (isQueueActive()) {
+        RR.queue?.playPrev?.();
+      } else {
+        RR.focus.navigate(-1);
+      }
+    },
+    nextReel:    () => {
+      if (isQueueActive()) {
+        RR.queue?.playNext?.();
+      } else {
+        RR.focus.navigate(+1);
+      }
+    },
+    react:       () => {
+      if (isQueueActive()) {
+        RR.queue?.likeActiveQueueItem?.();
+      } else {
+        RR.actions.reactLike();
+      }
+    },
+    repost:      () => {
+      if (isQueueActive()) {
+        RR.queue?.repostActiveQueueItem?.();
+      } else {
+        RR.actions.repost();
+      }
+    },
+    addToQueue:  () => RR.queue?.addCurrentReel?.(),
+    toggleAudio: () => RR.queue?.toggleAudioFocus?.(),
+    toggleQueue: () => RR.queue?.togglePanel?.(),
   };
 
   function runAction(action) {
@@ -56,6 +128,9 @@
         delete stored.comment;
         if (stored.nextReel === 'a') {
           stored.nextReel = 's';
+        }
+        if (!stored.toggleQueue) {
+          stored.toggleQueue = DEFAULT_KEYMAP.toggleQueue;
         }
         try { chrome.storage.local.set({ keymap: stored }); } catch (_) {}
         keymap = { ...DEFAULT_KEYMAP, ...stored };
@@ -110,16 +185,47 @@
     if (e.key === 'm' || e.key === 'M') {
       e.preventDefault();
       e.stopImmediatePropagation();
+      if ((isQueueActive() || isMouseOverQueue()) && RR.queue?.toggleMute) {
+        RR.queue.toggleMute();
+        return true;
+      }
+      RR.actions?.toggleMute?.();
+      return true;
+    }
+
+    // ── Space: works in ANY mode (normal feed, focus mode, queue dock) ─
+    // User requirement: "player will manually play or pause the video by pressing space.
+    // right now pressing space goes to next reel in normal mode."
+    if (e.key === ' ' || e.code === 'Space') {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+
+      if ((isQueueActive() || isMouseOverQueue()) && RR.queue?.togglePlayPause) {
+        RR.queue.togglePlayPause();
+        return true;
+      }
+
       const video = S.focusMode
         ? S.focusedVideo
         : (S.rotatedVideo || findActiveVideo());
-      if (!video) return true;
-      // Toggle the user's preference and apply it. Using a preference
-      // (not just the current video.muted) means the choice sticks across
-      // pause/play cycles and reel changes.
-      S.userMuted = !video.muted;
-      video.muted = S.userMuted;
+      if (video) togglePause(video);
       return true;
+    }
+
+    // Arrow keys when queue is active navigate the queue reels
+    if (isQueueActive()) {
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        RR.queue?.playPrev?.();
+        return true;
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        RR.queue?.playNext?.();
+        return true;
+      }
     }
 
     // The rest are focus-mode-only.
@@ -139,14 +245,6 @@
       RR.focus.navigate(+1);
       return true;
     }
-    // Space: pause / resume the focused video.
-    if (e.key === ' ' || e.code === 'Space') {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      const video = S.focusedVideo;
-      if (video) togglePause(video);
-      return true;
-    }
     return false;
   }
 
@@ -158,7 +256,11 @@
   function togglePause(video) {
     if (!video) return;
     if (video.paused) {
-      video.muted = S.userMuted;
+      if (document.documentElement?.dataset?.rrQueuePlaying === '1') {
+        video.muted = true;
+      } else if (S.userMuted !== null) {
+        video.muted = S.userMuted;
+      }
       video.play().catch(() => {});
     } else {
       video.pause();

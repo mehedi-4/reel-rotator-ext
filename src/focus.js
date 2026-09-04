@@ -32,6 +32,11 @@
     if (video.videoWidth > 0 && video.videoHeight > 0) {
       return video.videoWidth / video.videoHeight;
     }
+    // If we are currently in focus mode on this video, the rendered bounding box
+    // reflects the stretched viewport layout (or previous video's layout), not the intrinsic aspect!
+    if (S.focusMode && S.focusedVideo === video) {
+      return 9 / 16;
+    }
     const rect = video.getBoundingClientRect();
     if (rect.width > 0 && rect.height > 0) {
       return rect.width / rect.height;
@@ -109,7 +114,10 @@
    */
   function reapplyBaseline(video, degrees) {
     if (!video) return;
-    const deg = degrees !== undefined ? degrees : S.rotation;
+    const isQueueVideo = (video === RR.queue?.getVideoEl?.());
+    const deg = degrees !== undefined
+      ? degrees
+      : (isQueueVideo ? (S.queue?.[S.queueIndex]?.rotation || 0) : S.rotation);
     const layout = computeFocusLayout(deg, video);
 
     video.style.position = 'fixed';
@@ -139,7 +147,7 @@
     if (video._rrMuteHandler) return;
     const handler = () => {
       queueMicrotask(() => {
-        if (video.isConnected) video.muted = S.userMuted;
+        if (video.isConnected && S.userMuted !== null) video.muted = S.userMuted;
       });
     };
     video._rrMuteHandler = handler;
@@ -153,13 +161,31 @@
   }
 
   // ── Focus mode entry/exit ─────────────────────────────────────────────
-  function toggleFocusMode() {
-    if (S.focusMode) exitFocusMode();
-    else enterFocusMode();
+  function toggleFocusMode(explicitVideo) {
+    if (S.focusMode) {
+      if (explicitVideo && S.focusedVideo !== explicitVideo) {
+        exitFocusMode();
+        enterFocusMode(explicitVideo);
+      } else {
+        exitFocusMode();
+      }
+    } else {
+      enterFocusMode(explicitVideo);
+    }
   }
 
-  function enterFocusMode() {
-    const video = S.rotatedVideo || findActiveVideo();
+  function enterFocusMode(explicitVideo) {
+    let video = explicitVideo;
+    if (!video) {
+      const qVideo = RR.queue?.getVideoEl?.();
+      const isQueueActive = !!RR.queue?.isQueuePlaying?.();
+      const isQueueTarget = isQueueActive || (RR.queue?.isOpen?.() && (RR.queue?.isHovered?.() || S.queueAudioTarget === 'queue'));
+      if (isQueueTarget && qVideo && qVideo.src) {
+        video = qVideo;
+      } else {
+        video = S.rotatedVideo || findActiveVideo();
+      }
+    }
     if (!video) return;
 
     S.focusMode = true;
@@ -218,54 +244,126 @@
     video.style.borderRadius = '12px';
     video.style.boxShadow = '0 20px 50px rgba(0, 0, 0, 0.5)';
 
-    // Apply the user's mute preference up-front. Instagram's player may
-    // have set muted=true to satisfy autoplay policy on the new reel;
-    // we restore the user's choice immediately.
-    video.muted = S.userMuted;
+    const isQueueVideo = (video === RR.queue?.getVideoEl?.());
 
-    // Attach a per-video `play` listener that re-asserts muted after
-    // Instagram's own handlers run. Scoped to this video only — background
-    // reels' mute state is left untouched.
-    attachMuteEnforcement(video);
+    if (!isQueueVideo) {
+      if (S.userMuted !== null) video.muted = S.userMuted;
+      attachMuteEnforcement(video);
+    }
 
-    // Single source of truth for width/height/transform.
-    reapplyBaseline(video);
+    const rot = isQueueVideo
+      ? (S.queue?.[S.queueIndex]?.rotation || 0)
+      : S.rotation;
+    reapplyBaseline(video, rot);
   }
 
   /**
    * Put the focused video back where we found it. Leaves focusMode/backdrop
    * alone so callers can navigate to the next reel without re-creating them.
    */
-  function restoreVideoFromFocus() {
-    const video = S.focusedVideo;
+  function restoreVideoFromFocus(targetVideo, isQueue) {
+    const video = targetVideo || S.focusedVideo;
     if (!video) return;
 
-    // Detach the per-video play listener before we put the video back.
-    // (applyFocusStyles re-attaches on the next video if we're navigating.)
     detachMuteEnforcement(video);
 
-    // Restore inline styles.
-    for (const [key, value] of Object.entries(S.focusSavedStyles || {})) {
-      if (key.startsWith('_')) continue;
-      video.style[key] = value;
-    }
+    const isQueueVideo = (isQueue !== undefined)
+      ? isQueue
+      : (video === RR.queue?.getVideoEl?.());
 
-    // Put it back in its original slot — but only if that slot still exists.
-    // Instagram recycles reel nodes while we hold the video.
-    const origParent = S.focusSavedStyles?._origParent;
-    const origNext = S.focusSavedStyles?._origNextSibling;
-    if (origParent && document.contains(origParent)) {
-      if (origNext && origNext.parentElement === origParent) {
-        origParent.insertBefore(video, origNext);
-      } else {
-        origParent.appendChild(video);
+    if (isQueueVideo) {
+      const origParent = S.focusSavedStyles?._origParent || document.getElementById('reel-queue-player-wrap');
+      if (origParent && document.contains(origParent)) {
+        if (origParent.firstChild) {
+          origParent.insertBefore(video, origParent.firstChild);
+        } else {
+          origParent.appendChild(video);
+        }
       }
-    } else if (video.parentElement === document.body) {
-      video.remove();
+
+      // Explicitly clear all focus mode inline overrides so dock styles take over cleanly
+      video.style.position = '';
+      video.style.zIndex = '';
+      video.style.top = '';
+      video.style.left = '';
+      video.style.width = '100%';
+      video.style.height = '100%';
+      video.style.maxWidth = '';
+      video.style.maxHeight = '';
+      video.style.margin = '';
+      video.style.objectFit = 'contain';
+      video.style.boxShadow = '';
+      video.style.borderRadius = '';
+      video.style.transition = '';
+      video.style.transform = 'none';
+      video.style.transformOrigin = 'center center';
+
+      const item = S.queue && S.queueIndex !== -1 && S.queue[S.queueIndex];
+      RR.queue?.applyQueueVideoRotation?.(video, item?.rotation || 0);
+    } else {
+      // Restore inline styles for feed video.
+      const saved = S.focusSavedStyles || {};
+      video.style.position = saved.position || '';
+      video.style.zIndex = saved.zIndex || '';
+      video.style.top = saved.top || '';
+      video.style.left = saved.left || '';
+      video.style.width = saved.width || '';
+      video.style.height = saved.height || '';
+      video.style.maxWidth = saved.maxWidth || '';
+      video.style.maxHeight = saved.maxHeight || '';
+      video.style.margin = saved.margin || '';
+      video.style.objectFit = saved.objectFit || '';
+      video.style.transform = saved.transform || '';
+      video.style.transition = saved.transition || '';
+      video.style.transformOrigin = saved.transformOrigin || '';
+      video.style.borderRadius = saved.borderRadius || '';
+      video.style.boxShadow = saved.boxShadow || '';
+
+      const origParent = S.focusSavedStyles?._origParent;
+      const origNext = S.focusSavedStyles?._origNextSibling;
+      if (origParent && document.contains(origParent)) {
+        // Prevent thumbnail from rendering on top of the video:
+        // In Instagram's container, if there's a thumbnail img, ensure video is placed AFTER the img
+        const thumbImg = origParent.querySelector('img');
+        if (thumbImg && (origNext === thumbImg || !origNext)) {
+          if (thumbImg.nextSibling) {
+            origParent.insertBefore(video, thumbImg.nextSibling);
+          } else {
+            origParent.appendChild(video);
+          }
+        } else if (origNext && origNext.parentElement === origParent) {
+          origParent.insertBefore(video, origNext);
+        } else {
+          origParent.appendChild(video);
+        }
+      } else if (video.parentElement === document.body) {
+        const container = RR.domUtils?.findReelContainer?.(video);
+        if (container && document.contains(container)) {
+          container.appendChild(video);
+        } else {
+          video.remove();
+        }
+      }
     }
 
-    S.focusedVideo = null;
+    if (S.focusedVideo === video) {
+      S.focusedVideo = null;
+    }
     S.focusSavedStyles = null;
+  }
+
+  function cleanupStrayElements() {
+    const bodyVideos = document.body.querySelectorAll(':scope > video:not(#reel-queue-video)');
+    for (const v of bodyVideos) {
+      if (!S.focusMode || v !== S.focusedVideo) {
+        restoreVideoFromFocus(v);
+      }
+    }
+    if (!S.focusMode) {
+      const backdrops = document.querySelectorAll('#reel-focus-backdrop');
+      for (const b of backdrops) b.remove();
+      S.focusBackdrop = null;
+    }
   }
 
   function exitFocusMode() {
@@ -274,13 +372,23 @@
     if (!S.focusMode) return;
 
     const video = S.focusedVideo;
+    const isQueueVideo = (video === RR.queue?.getVideoEl?.());
 
-    restoreVideoFromFocus();
+    // Exit focus mode state BEFORE restoring video so applyQueueVideoRotation
+    // does not misidentify the video as still focused and reapply full-screen layout.
+    S.focusMode = false;
+    S.focusedVideo = null;
+    S.focusNavigating = false;
+    S.wheelAccum = 0;
 
-    // A reel we rotated by inheritance never went through applyRotation,
-    // so its restored transform is empty. Re-apply so the feed matches.
-    if (video && video === S.rotatedVideo && S.rotation !== 0 && !video.style.transform) {
+    restoreVideoFromFocus(video, isQueueVideo);
+    cleanupStrayElements();
+
+    // Re-apply rotation for regular feed video if requested, ensuring overflow mods are cleanly tracked
+    if (!isQueueVideo && video && video === S.rotatedVideo && S.rotation !== 0 && !video.style.transform) {
       RR.rotation.applyRotation(video, S.rotation);
+    } else {
+      RR.rotation?.clearOverflowMods?.();
     }
 
     // Tear down backdrop with a fade-out.
@@ -294,20 +402,37 @@
       }, 300);
     }
 
-    S.focusMode = false;
-    S.focusNavigating = false;
-    S.wheelAccum = 0;
-
-    // Detach the per-video mute listener on whatever focused video remains
-    // (restoreVideoFromFocus already does this, but defense in depth).
     if (video) detachMuteEnforcement(video);
 
     RR.ui?.setFocusButtonActive?.(false);
+    RR.queue?.updateNowPlayingUI?.();
   }
 
   // ── Reel navigation (focus mode & normal feed) ─────────────────────────
   // direction: 1 = next reel, -1 = previous reel
   function navigate(direction) {
+    const isQueueActive = !!RR.queue?.isQueuePlaying?.();
+    const isQueueFocused = S.focusMode && S.focusedVideo === RR.queue?.getVideoEl?.();
+
+    if (isQueueFocused || (isQueueActive && !S.focusMode)) {
+      const now = Date.now();
+      const cooldown = S.focusMode ? NAV_COOLDOWN : 350;
+      if (now - S.lastNavTime < cooldown) return;
+      S.lastNavTime = now;
+      S.focusNavigating = true;
+      S.wheelAccum = 0;
+      if (S.wheelResetTimer) clearTimeout(S.wheelResetTimer);
+
+      if (direction > 0) RR.queue?.playNext?.();
+      else RR.queue?.playPrev?.();
+
+      setTimeout(() => {
+        S.focusNavigating = false;
+        S.wheelAccum = 0;
+      }, cooldown);
+      return;
+    }
+
     if (S.focusMode) {
       if (S.focusNavigating) return;
 
@@ -321,11 +446,25 @@
 
       // Drop the video back into the feed so the page can scroll normally.
       restoreVideoFromFocus();
-      if (S.rotatedVideo) resetRotation(S.rotatedVideo);
-      else if (prevVideo) {
+      RR.rotation?.clearOverflowMods?.();
+      S.rotation = 0;
+      S.rotatedVideo = null;
+      if (prevVideo) {
         prevVideo.style.transform = '';
+        prevVideo.style.transition = '';
         prevVideo.style.transformOrigin = '';
         prevVideo.style.objectFit = '';
+        prevVideo.style.position = '';
+        prevVideo.style.top = '';
+        prevVideo.style.left = '';
+        prevVideo.style.width = '';
+        prevVideo.style.height = '';
+        prevVideo.style.maxWidth = '';
+        prevVideo.style.maxHeight = '';
+        prevVideo.style.margin = '';
+        prevVideo.style.zIndex = '';
+        prevVideo.style.borderRadius = '';
+        prevVideo.style.boxShadow = '';
       }
 
       const container = findScrollContainer();
@@ -420,6 +559,7 @@
   function refocusOn(newVideo) {
     if (!S.focusMode) return;
     if (!newVideo || newVideo === S.focusedVideo) return;
+    if (S.focusedVideo && S.focusedVideo === RR.queue?.getVideoEl?.()) return; // Never steal focus from queue video
     if (S.focusNavigating) return;
 
     const prevVideo = S.focusedVideo;
@@ -427,11 +567,25 @@
 
     // Put the old focused video back where we found it.
     restoreVideoFromFocus();
-    if (S.rotatedVideo) resetRotation(S.rotatedVideo);
-    else if (prevVideo) {
+    RR.rotation?.clearOverflowMods?.();
+    S.rotation = 0;
+    S.rotatedVideo = null;
+    if (prevVideo) {
       prevVideo.style.transform = '';
+      prevVideo.style.transition = '';
       prevVideo.style.transformOrigin = '';
       prevVideo.style.objectFit = '';
+      prevVideo.style.position = '';
+      prevVideo.style.top = '';
+      prevVideo.style.left = '';
+      prevVideo.style.width = '';
+      prevVideo.style.height = '';
+      prevVideo.style.maxWidth = '';
+      prevVideo.style.maxHeight = '';
+      prevVideo.style.margin = '';
+      prevVideo.style.zIndex = '';
+      prevVideo.style.borderRadius = '';
+      prevVideo.style.boxShadow = '';
     }
 
     // Re-arm the rotation so the new video inherits it (same logic as navigate()).
@@ -451,44 +605,45 @@
   /**
    * Detect whether the underlying feed's "active reel" has diverged from
    * the one we're focusing on. If yes, adopt it via refocusOn().
-   *
-   * Strict gating to avoid surprise switches:
-   *   1. The focused video must be paused or ended (otherwise it's still
-   *      actively playing and we shouldn't switch).
-   *   2. The candidate must be clearly "current" — close to viewport center
-   *      AND large enough to be a real reel, not a hover preview.
-   *
-   * This guards against the case where Instagram plays multiple videos
-   * simultaneously (hover-to-play, side previews): we only follow the
-   * user's actual current reel, not a passing preview.
-   *
-   * Called periodically and from event listeners. Cheap when nothing has
-   * changed.
    */
-  function syncToBackground() {
+  function syncToBackground(forcedVideo) {
     if (!S.focusMode || S.focusNavigating) return;
     const focused = S.focusedVideo;
-    // Gate 1: focused video must be paused or ended.
-    if (focused && !focused.paused && !focused.ended) return;
+    if (focused && focused === RR.queue?.getVideoEl?.()) return;
+
+    if (forcedVideo && forcedVideo !== focused) {
+      refocusOn(forcedVideo);
+      return;
+    }
 
     const active = findActiveVideo();
     if (!active || active === focused) return;
 
-    // Gate 2: candidate must look like a real reel, not a preview tile.
-    // The focused video we lifted is large; we don't want to switch to
-    // a small side preview that just happens to be playing.
+    // If focused is playing, only switch if active is genuinely playing and centered
+    if (focused && !focused.paused && !focused.ended) {
+      if (active.paused || active.ended) return;
+    }
+
     const rect = active.getBoundingClientRect();
-    if (rect.width < window.innerWidth * 0.5) return;
-    if (rect.height < window.innerHeight * 0.5) return;
+    if (rect.width < window.innerWidth * 0.4) return;
+    if (rect.height < window.innerHeight * 0.4) return;
 
     refocusOn(active);
   }
 
   // ── Wheel handler ────────────────────────────────────────────────────
   function handleWheel(e) {
-    if (!S.focusMode) return;
-    // Stop the page from scrolling underneath us; navigate() moves it by
-    // exactly one reel instead.
+    const isQueueActive = !!RR.queue?.isQueuePlaying?.();
+    const isQueueFocused = S.focusMode && S.focusedVideo === RR.queue?.getVideoEl?.();
+
+    if (!S.focusMode && !isQueueActive) return;
+
+    // Allow scrolling naturally inside the queue playlist
+    if (e.target && e.target.closest('#reel-queue-list')) {
+      return;
+    }
+
+    // Stop the page from scrolling underneath us; navigate() moves by exactly one reel.
     e.preventDefault();
     e.stopPropagation();
 

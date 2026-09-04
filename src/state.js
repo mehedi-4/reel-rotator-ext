@@ -39,9 +39,14 @@
     scrollContainer: null,        // cached main scroll container
 
     // User media preference
-    userMuted: false,             // user's intended mute state; re-asserted
-                                  // after pause/play and reel navigation so
-                                  // Instagram's player doesn't override it.
+    userMuted: null,              // user's intended mute state (null = unset, true = muted, false = unmuted);
+                                  // re-asserted after pause/play and reel navigation once set.
+
+    // Queue feature state
+    queue: [],                    // Array of { id, src, author, caption, thumbnail, permalink, finished }
+    queueIndex: -1,               // Index of currently playing queued item
+    queueAudioTarget: 'queue',    // 'queue' | 'main'
+    queueVisible: false,          // Whether the queue side panel is open
   };
 
   // ── Helpers ─────────────────────────────────────────────────────────

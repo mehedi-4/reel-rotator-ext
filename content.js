@@ -15,7 +15,17 @@
     return;
   }
 
+  function ensureBridgeLoaded() {
+    try {
+      const script = document.createElement('script');
+      script.src = chrome.runtime.getURL('src/bridge.js');
+      script.onload = () => script.remove();
+      (document.head || document.documentElement).appendChild(script);
+    } catch (_) {}
+  }
+
   function bootstrap() {
+    ensureBridgeLoaded();
     RR.keymap.setupStorageListener();
     RR.keymap.hydrate(() => RR.ui.init());
   }

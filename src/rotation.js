@@ -85,11 +85,22 @@
     S.rotation = 0;
     S.rotatedVideo = null;
 
-    if (S.focusMode) {
-      // Re-apply the focus-mode layout at 0°. focus.reapplyBaseline()
-      // computes fresh, correct dimensions from the video's aspect ratio
-      // and writes them onto the element — so the video is fully visible.
+    if (S.focusMode && S.focusedVideo === video && video.parentElement === document.body) {
+      // Re-apply the focus-mode layout at 0° ONLY if the video is currently focused in document.body.
       RR.focus?.reapplyBaseline?.(video);
+    } else if (video.parentElement !== document.body) {
+      // Ensure no focus-mode or lingering rotation styles remain on feed videos
+      video.style.position = '';
+      video.style.zIndex = '';
+      video.style.top = '';
+      video.style.left = '';
+      video.style.width = '';
+      video.style.height = '';
+      video.style.maxWidth = '';
+      video.style.maxHeight = '';
+      video.style.margin = '';
+      video.style.borderRadius = '';
+      video.style.boxShadow = '';
     }
 
     RR.ui?.updateButtonState?.();
@@ -101,7 +112,11 @@
    */
   function clearOverflowMods() {
     for (const { el, orig } of S.overflowMods) {
-      try { el.style.overflow = orig; } catch (_) { /* element may be gone */ }
+      try {
+        if (el && el.isConnected) {
+          el.style.overflow = orig;
+        }
+      } catch (_) { /* element may be gone */ }
     }
     S.overflowMods = [];
   }

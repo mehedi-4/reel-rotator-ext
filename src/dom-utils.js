@@ -32,10 +32,10 @@
     if (S.focusMode && S.focusedVideo && document.contains(S.focusedVideo)) {
       return S.focusedVideo;
     }
-    if (S.rotatedVideo && document.contains(S.rotatedVideo) && isVideoVisible(S.rotatedVideo)) {
+    if (S.rotatedVideo && S.rotatedVideo.id !== 'reel-queue-video' && document.contains(S.rotatedVideo) && isVideoVisible(S.rotatedVideo)) {
       return S.rotatedVideo;
     }
-    const videos = Array.from(document.querySelectorAll('video'));
+    const videos = Array.from(document.querySelectorAll('video:not(#reel-queue-video)'));
     if (videos.length === 0) return null;
 
     const visible = videos.filter(isVideoVisible);
@@ -448,6 +448,229 @@
   }
 
   /**
+   * Find the real audio/mute button inside a specific DOM subtree.
+   */
+  function findAudioButtonInScope(scope, vRect) {
+    if (!scope) return null;
+
+    // 1. Explicit audio/mute/sound/volume aria-labels or roles
+    const exactSelectors = [
+      'button[aria-label*="audio" i]:not(#reel-rotate-btn):not([id^="reel-"])',
+      '[role="button"][aria-label*="audio" i]:not(#reel-rotate-btn):not([id^="reel-"])',
+      'button[aria-label*="mute" i]:not(#reel-rotate-btn):not([id^="reel-"])',
+      '[role="button"][aria-label*="mute" i]:not(#reel-rotate-btn):not([id^="reel-"])',
+      'button[aria-label*="sound" i]:not(#reel-rotate-btn):not([id^="reel-"])',
+      '[role="button"][aria-label*="sound" i]:not(#reel-rotate-btn):not([id^="reel-"])',
+      'button[aria-label*="volume" i]:not(#reel-rotate-btn):not([id^="reel-"])',
+      '[role="button"][aria-label*="volume" i]:not(#reel-rotate-btn):not([id^="reel-"])',
+      'button[aria-label*="silenc" i]:not(#reel-rotate-btn):not([id^="reel-"])',
+      '[role="button"][aria-label*="silenc" i]:not(#reel-rotate-btn):not([id^="reel-"])',
+      'button[aria-label*="stumm" i]:not(#reel-rotate-btn):not([id^="reel-"])',
+      '[role="button"][aria-label*="stumm" i]:not(#reel-rotate-btn):not([id^="reel-"])',
+      'button[aria-label*="ton " i]:not(#reel-rotate-btn):not([id^="reel-"])',
+      '[role="button"][aria-label*="ton " i]:not(#reel-rotate-btn):not([id^="reel-"])',
+      'svg[aria-label*="audio" i]',
+      'svg[aria-label*="mute" i]',
+      'svg[aria-label*="sound" i]',
+      'svg[aria-label*="volume" i]',
+      'svg[aria-label*="silenc" i]',
+      'svg[aria-label*="stumm" i]',
+    ].join(', ');
+
+    const labeledMatches = scope.querySelectorAll(exactSelectors);
+    for (const el of labeledMatches) {
+      if (el.tagName === 'A' || el.closest('a')) continue;
+      const clickable = el.closest('button, [role="button"]') || el;
+      if (!clickable) continue;
+      const r = clickable.getBoundingClientRect();
+      if (r.width === 0 && r.height === 0) continue;
+      return clickable;
+    }
+
+    // 2. Spatial detection: bottom-right corner of the reel
+    if (vRect) {
+      const candidates = scope.querySelectorAll('button:not(#reel-rotate-btn):not([id^="reel-"]), [role="button"]:not(#reel-rotate-btn):not([id^="reel-"])');
+      let bestBtn = null;
+      let bestDist = Infinity;
+      const targetX = vRect.right - 25;
+      const targetY = vRect.bottom - 25;
+
+      for (const btn of candidates) {
+        if (btn.tagName === 'A' || btn.closest('a')) continue;
+        const r = btn.getBoundingClientRect();
+        if (r.width < 16 || r.height < 16 || r.width > 110 || r.height > 110) continue;
+
+        // Must be located in bottom-right region of the reel
+        if (r.left < vRect.left + vRect.width * 0.35) continue;
+        if (r.top < vRect.top + vRect.height * 0.35) continue;
+        if (r.right > vRect.right + 120 || r.bottom > vRect.bottom + 120) continue;
+
+        // Skip non-audio action buttons
+        const label = (btn.getAttribute('aria-label') || '').toLowerCase();
+        const text = (btn.textContent || '').toLowerCase();
+        if (label.includes('like') || label.includes('unlike') || label.includes('comment') ||
+            label.includes('share') || label.includes('direct') || label.includes('repost') ||
+            label.includes('save') || label.includes('bookmark') || label.includes('more') ||
+            label.includes('option') || text.includes('follow') || text.includes('profile')) {
+          continue;
+        }
+
+        if (!btn.querySelector('svg') && !btn.matches('svg')) continue;
+
+        const dist = Math.hypot(r.right - targetX, r.bottom - targetY);
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestBtn = btn;
+        }
+      }
+
+      if (bestBtn) return bestBtn;
+    }
+
+    return null;
+  }
+
+  /**
+   * Find the real audio/mute button for a given video on Instagram.
+   * Checks inside the resolved reel container first, then searches spatially.
+   */
+  function findAudioButtonForVideo(video) {
+    if (!video) return null;
+
+    const S = RR.state;
+    const focusParent = (S.focusMode && S.focusSavedStyles?._origParent);
+    const container = findReelContainer(video, focusParent);
+
+    let vRect = focusParent ? focusParent.getBoundingClientRect() : null;
+    if (!vRect || (vRect.width === 0 && vRect.height === 0)) {
+      vRect = video.getBoundingClientRect();
+    }
+
+    // 1. Search inside resolved reel container
+    if (container) {
+      const btn = findAudioButtonInScope(container, vRect);
+      if (btn) return btn;
+    }
+
+    // 2. Search inside parent/ancestors
+    let parent = (focusParent || video.parentElement);
+    let depth = 0;
+    while (parent && parent !== document.body && depth < 6) {
+      const btn = findAudioButtonInScope(parent, vRect);
+      if (btn) return btn;
+      parent = parent.parentElement;
+      depth++;
+    }
+
+    // 3. Global spatial search across page for audio button aligned with this reel
+    const globalAudioSelectors = [
+      'button[aria-label*="audio" i]:not(#reel-rotate-btn):not([id^="reel-"])',
+      '[role="button"][aria-label*="audio" i]:not(#reel-rotate-btn):not([id^="reel-"])',
+      'button[aria-label*="mute" i]:not(#reel-rotate-btn):not([id^="reel-"])',
+      '[role="button"][aria-label*="mute" i]:not(#reel-rotate-btn):not([id^="reel-"])',
+      'button[aria-label*="sound" i]:not(#reel-rotate-btn):not([id^="reel-"])',
+      '[role="button"][aria-label*="sound" i]:not(#reel-rotate-btn):not([id^="reel-"])',
+      'button[aria-label*="volume" i]:not(#reel-rotate-btn):not([id^="reel-"])',
+      '[role="button"][aria-label*="volume" i]:not(#reel-rotate-btn):not([id^="reel-"])',
+      'svg[aria-label*="audio" i]',
+      'svg[aria-label*="mute" i]',
+      'svg[aria-label*="sound" i]',
+      'svg[aria-label*="volume" i]',
+    ].join(', ');
+
+    const allMatches = document.querySelectorAll(globalAudioSelectors);
+    let bestBtn = null;
+    let bestDist = Infinity;
+
+    for (const el of allMatches) {
+      if (el.tagName === 'A' || el.closest('a')) continue;
+      const clickable = el.closest('button, [role="button"]') || el;
+      const r = clickable.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) continue;
+
+      // Must vertically overlap active reel
+      if (r.bottom < vRect.top - 60 || r.top > vRect.bottom + 60) continue;
+
+      const dist = Math.abs(r.top + r.height / 2 - (vRect.top + vRect.height / 2));
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestBtn = clickable;
+      }
+    }
+
+    if (bestBtn) return bestBtn;
+
+    // 4. Global bottom-right spatial fallback for buttons within the reel rect
+    const allButtons = document.querySelectorAll('button:not(#reel-rotate-btn):not([id^="reel-"]), [role="button"]:not(#reel-rotate-btn):not([id^="reel-"])');
+    let cornerBtn = null;
+    let cornerDist = Infinity;
+    const targetX = vRect.right - 25;
+    const targetY = vRect.bottom - 25;
+
+    for (const btn of allButtons) {
+      if (btn.tagName === 'A' || btn.closest('a')) continue;
+      const r = btn.getBoundingClientRect();
+      if (r.width < 16 || r.height < 16 || r.width > 110 || r.height > 110) continue;
+      if (r.left < vRect.left + vRect.width * 0.35 || r.top < vRect.top + vRect.height * 0.35) continue;
+      if (r.right > vRect.right + 120 || r.bottom > vRect.bottom + 120) continue;
+
+      const label = (btn.getAttribute('aria-label') || '').toLowerCase();
+      if (label.includes('like') || label.includes('comment') || label.includes('share') ||
+          label.includes('repost') || label.includes('save') || label.includes('more') || label.includes('option')) {
+        continue;
+      }
+
+      if (!btn.querySelector('svg') && !btn.matches('svg')) continue;
+
+      const dist = Math.hypot(r.right - targetX, r.bottom - targetY);
+      if (dist < cornerDist) {
+        cornerDist = dist;
+        cornerBtn = btn;
+      }
+    }
+
+    return cornerBtn;
+  }
+
+  /**
+   * Determine if an audio button or video represents a currently-muted state.
+   */
+  function isAudioButtonMuted(btn, video) {
+    if (btn) {
+      const label = (
+        btn.getAttribute('aria-label') ||
+        btn.querySelector('svg')?.getAttribute('aria-label') ||
+        btn.textContent ||
+        ''
+      ).toLowerCase();
+
+      if (
+        label.includes('is muted') ||
+        label.includes('unmute') ||
+        label.includes('activar') ||
+        label.includes('ativar') ||
+        label.includes('einschalten') ||
+        label.includes('desactivar silencio')
+      ) {
+        return true;
+      }
+      if (
+        label.includes('is playing') ||
+        (label.includes('mute') && !label.includes('unmute')) ||
+        label.includes('silenciar') ||
+        label.includes('ausschalten') ||
+        label.includes('désactiver')
+      ) {
+        return false;
+      }
+    }
+    if (video) {
+      return video.muted;
+    }
+    return true;
+  }
+
+  /**
    * Check for an open confirmation dialog, action menu, or snackbar toast
    * for removing/undoing a repost, and automatically click the confirmation button.
    */
@@ -562,6 +785,16 @@
   function clickReelButton(video, labelFragments) {
     if (!video) return false;
 
+    const isAudio = (labelFragments || []).some(f => {
+      const lf = f.toLowerCase();
+      return lf.includes('audio') || lf.includes('mute') || lf.includes('sound') || lf.includes('volume') || lf.includes('silenc');
+    });
+
+    if (isAudio) {
+      const btn = findAudioButtonForVideo(video);
+      return btn ? triggerClick(btn) : false;
+    }
+
     const isRepost = (labelFragments || []).some(
       f => f.toLowerCase().includes('repost')
     );
@@ -588,6 +821,8 @@
     getVideoContainer,
     findScrollContainer,
     findReelContainer,
+    findAudioButtonForVideo,
+    isAudioButtonMuted,
     triggerClick,
     clickReelButton,
     tryConfirmRemoveRepost,

@@ -83,9 +83,60 @@
     }
   }
 
+  /**
+   * Toggle mute on the active reel by triggering Instagram's real speaker button.
+   * Updates Instagram's native React audio state so subsequent reels stay unmuted
+   * and the speaker icon in the bottom right corner reflects the correct state.
+   */
+  function toggleMute() {
+    const video = getTargetVideo();
+    if (!video) return;
+
+    const S = RR.state;
+    // Determine target muted state: toggle from current video.muted
+    const currentlyMuted = video.muted;
+    const targetMuted = !currentlyMuted;
+    S.userMuted = targetMuted;
+
+    // 1. Click Instagram's real audio button
+    const btn = RR.domUtils?.findAudioButtonForVideo?.(video);
+    let clicked = false;
+    if (btn) {
+      clicked = RR.domUtils?.triggerClick?.(btn) || false;
+    }
+
+    // 2. Immediate feedback on the video element
+    video.muted = targetMuted;
+
+    // 3. Dispatch to main-world bridge for fallback if needed
+    try {
+      window.dispatchEvent(new CustomEvent('RR_TOGGLE_MUTE_REQ', {
+        detail: {
+          targetMuted,
+          buttonClicked: clicked
+        }
+      }));
+    } catch (_) {}
+
+    // 4. Verification re-assert after Instagram's event cycle
+    [50, 150, 300].forEach((delay) => {
+      setTimeout(() => {
+        if (!video || !document.contains(video)) return;
+        if (document.documentElement?.dataset?.rrQueuePlaying === '1') {
+          video.muted = true;
+          return;
+        }
+        if (video.muted !== S.userMuted) {
+          video.muted = S.userMuted;
+        }
+      }, delay);
+    });
+  }
+
   // ── Expose ──────────────────────────────────────────────────────────
   RR.actions = {
     reactLike,
     repost,
+    toggleMute,
   };
 })();

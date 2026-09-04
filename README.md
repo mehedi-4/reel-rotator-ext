@@ -48,13 +48,16 @@ Click the **Reel Rotator** icon in your toolbar to customize. Defaults:
 | `S` | Next reel (down) |
 | `Q` | React (like / unlike) the active reel |
 | `V` | Repost the active reel |
+| `D` | Add active reel to Queue (plays in right dock) |
+| `T` | Toggle audio focus (Queue vs Main Feed) |
+| `G` | Hide / unhide Queue section |
 
 ### Always-on shortcuts (not rebindable)
 
 | Key | Mode | Action |
 |-----|------|--------|
-| `M` | Anywhere | Mute / unmute the active video |
-| `Space` | Focus only | Pause / resume |
+| `M` | Anywhere | Mute / unmute the active video (or queue if hovering over dock) |
+| `Space` | Anywhere | Play / pause active video (prevents Instagram reel advance) |
 | `↑` | Focus only | Previous reel |
 | `↓` | Focus only | Next reel |
 | `Esc` | Focus only | Exit focus mode |
@@ -79,13 +82,15 @@ reel-rotator-ext/
 ├── manifest.json          # MV3 manifest, declares split content scripts in load order
 ├── content.js             # Thin orchestrator (~30 lines: init + event wiring)
 ├── popup.html / .js / .css # Settings popup (opened via toolbar icon)
-├── styles.css             # On-page styles (rotate button, focus backdrop)
+├── styles.css             # On-page styles (rotate button, focus backdrop, queue dock)
 ├── src/
-│   ├── state.js           # Single source of truth: rotation/focus/nav state
+│   ├── bridge.js          # MAIN-world script: React Fiber extraction & feed mute enforcement
+│   ├── state.js           # Single source of truth: rotation/focus/nav/queue state
 │   ├── dom-utils.js       # findActiveVideo, findScrollContainer, clickReelButton
 │   ├── rotation.js        # handleRotate, applyRotation, applyRotationInFocus
 │   ├── focus.js           # Focus mode + scroll-driven reel navigation
-│   ├── actions.js         # reactLike, openSend, openComment
+│   ├── actions.js         # reactLike, repost
+│   ├── queue.js           # YouTube-style persistent Reels queue, drag & drop, playlist
 │   ├── ui.js              # Button creation + observer setup
 │   └── keymap.js          # Keyboard dispatcher + storage hydration + live updates
 └── icons/                 # 16/48/128px toolbar & store icons
@@ -93,13 +98,14 @@ reel-rotator-ext/
 
 Every module attaches itself to a single shared namespace (`window.__reelRotator`), loaded in dependency order declared in `manifest.json`. This keeps each file focused on one responsibility while sharing state without leaking globals into the page.
 
-### Key bug fixes in this build
+### Features & Key Fixes in this build
 
-- **Rotation in focus mode** no longer overflows the viewport. A new `applyRotationInFocus` reuses the focus-mode layout (fixed centering + swapped dimensions at 90°/270°).
-- **4th rotation press** correctly wraps to 0° without leaving the video at swapped dimensions.
-- **Like/Send/Comment in focus mode** find the buttons in the original reel container (`S.focusSavedStyles._origParent`), not in the lifted video's ancestors.
-- **Pause/play in focus mode** uses capture-phase keydown with `stopImmediatePropagation` so Instagram's "Space = next reel" doesn't override.
-- **Mute stickiness** — `userMuted` preference is re-asserted after pause/play and reel navigation via a per-video capture-phase `play` listener (scoped to the focused video only, so background reels aren't affected).
+- **Reels Queue Dock (D)**: YouTube-style right side panel to enqueue reels, drag-and-drop reordering, delete, and autoplay next.
+- **Scroll Wheel Click (Middle Click)**: Middle-clicking any reel in the queue playlist or the queue player opens that reel directly in a new tab.
+- **Playback Coordination**: When a reel in the main feed starts playing (scroll, click, or loop), the queue video automatically pauses.
+- **Rotation Memory in Queue**: When adding a rotated reel to the queue (`D`), it remembers its exact rotation and plays at that rotation in the queue.
+- **Queue Player Proportions**: Expanded video height in the queue (up to 72vh / 640px) with compact, space-efficient playlist items below.
+- **Strict Continuous Feed Muting**: While the queue video plays audio, feed videos stay strictly muted even across scrolling and video loops. Toggle audio focus anytime with `T`.
 
 ## License
 

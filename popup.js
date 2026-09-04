@@ -7,13 +7,16 @@
 
   // Same constants as src/keymap.js — kept in sync by convention.
   const DEFAULTS = {
-    rotate:   'r',
-    rotateCW: 'e',
-    focus:    'f',
-    prevReel: 'w',
-    nextReel: 's',
-    react:    'q',
-    repost:   'v',
+    rotate:      'r',
+    rotateCW:    'e',
+    focus:       'f',
+    prevReel:    'w',
+    nextReel:    's',
+    react:       'q',
+    repost:      'v',
+    addToQueue:  'd',
+    toggleAudio: 't',
+    toggleQueue: 'g',
   };
 
   const inputs = Array.from(document.querySelectorAll('input[data-action]'));
@@ -31,6 +34,9 @@
       delete stored.comment;
       if (stored.nextReel === 'a') {
         stored.nextReel = 's';
+      }
+      if (!stored.toggleQueue) {
+        stored.toggleQueue = DEFAULTS.toggleQueue;
       }
       try { chrome.storage.local.set({ keymap: stored }); } catch (_) {}
       const km = { ...DEFAULTS, ...stored };

@@ -34,7 +34,11 @@
     S.btn.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      RR.rotation.handleRotate();
+      if (RR.queue?.isQueuePlaying?.()) {
+        RR.queue.rotateActiveQueueItem(90);
+      } else {
+        RR.rotation.handleRotate();
+      }
     });
 
     document.body.appendChild(S.btn);
@@ -43,9 +47,13 @@
   /** Update the visual state of the rotate button based on current rotation. */
   function updateButtonState() {
     if (!S.btn) return;
-    if (S.rotation !== 0) {
+    const isQueue = RR.queue?.isQueuePlaying?.();
+    const activeRot = isQueue
+      ? (S.queue?.[S.queueIndex]?.rotation || 0)
+      : S.rotation;
+    if (activeRot !== 0) {
       S.btn.classList.add('rotated');
-      S.degreeBadge.textContent = S.rotation + '°';
+      S.degreeBadge.textContent = activeRot + '°';
     } else {
       S.btn.classList.remove('rotated');
     }
@@ -116,25 +124,39 @@
   }
 
   function setupScrollReset() {
+    let scrollTimer = null;
+
+    const onScroll = () => {
+      if (S.focusMode) {
+        // The underlying feed scrolled. Adopt whatever reel is now active
+        // so focus mode follows page-driven changes (auto-advance,
+        // external taps, programmatic navigation).
+        if (scrollTimer) clearTimeout(scrollTimer);
+        scrollTimer = setTimeout(() => RR.focus?.syncToBackground?.(), 100);
+        return;
+      }
+      if (S.rotatedVideo) {
+        // Immediately reset rotated feed reel and clear overflow mods on scroll
+        // so that unclipped overflow and rotated transform do not bleed over newly scrolled reels
+        resetIfActive();
+      }
+    };
+
+    // Attach to window and document with capture phase to catch scrolls on ANY element
+    window.addEventListener('scroll', onScroll, { capture: true, passive: true });
+    document.addEventListener('scroll', onScroll, { capture: true, passive: true });
+
+    // Also attach to wheel for immediate response when feed scroll initiates
+    window.addEventListener('wheel', (e) => {
+      if (!S.focusMode && S.rotatedVideo && Math.abs(e.deltaY) > 5) {
+        resetIfActive();
+      }
+    }, { capture: true, passive: true });
+
     const tryAttach = () => {
       const container = findScrollContainer();
       if (!container) return false;
-
-      let scrollTimer = null;
-      container.addEventListener('scroll', () => {
-        if (S.focusMode) {
-          // The underlying feed scrolled. Adopt whatever reel is now active
-          // so focus mode follows page-driven changes (auto-advance,
-          // external taps, programmatic navigation).
-          if (scrollTimer) clearTimeout(scrollTimer);
-          scrollTimer = setTimeout(() => RR.focus?.syncToBackground?.(), 100);
-          return;
-        }
-        if (S.rotatedVideo) {
-          if (scrollTimer) clearTimeout(scrollTimer);
-          scrollTimer = setTimeout(resetIfActive, 100);
-        }
-      }, { passive: true });
+      container.addEventListener('scroll', onScroll, { passive: true });
       return true;
     };
 
@@ -149,14 +171,48 @@
   function setupVideoPlayReset() {
     // Capture phase so we catch the play event before Instagram does.
     document.addEventListener('play', (e) => {
-      if (e.target.tagName !== 'VIDEO') return;
+      const vid = e.target;
+      if (vid.tagName !== 'VIDEO') return;
+
       if (S.focusMode) {
-        // A different video started playing in the feed. Adopt it —
-        // focus mode should reflect whatever Instagram considers "current".
-        RR.focus?.syncToBackground?.();
-        return;
+        // A different video started playing in the feed. Adopt it immediately.
+        if (vid !== S.focusedVideo && vid.id !== 'reel-queue-video') {
+          RR.focus?.refocusOn?.(vid);
+        }
+      } else if (S.rotatedVideo && vid !== S.rotatedVideo) {
+        resetIfActive();
       }
-      if (S.rotatedVideo && e.target !== S.rotatedVideo) resetIfActive();
+
+      // If user has set an audio preference (S.userMuted !== null) and queue is not playing:
+      // ensure the newly playing reel plays with that preference and syncs the native button.
+      if (vid.id !== 'reel-queue-video' && S.userMuted !== null && document.documentElement?.dataset?.rrQueuePlaying !== '1') {
+        if (S.userMuted === false) {
+          if (vid.muted) {
+            vid.muted = false;
+          }
+          // Verify and click native audio button if Instagram started the new reel in muted state
+          setTimeout(() => {
+            if (S.userMuted === false && document.documentElement?.dataset?.rrQueuePlaying !== '1') {
+              const audioBtn = RR.domUtils?.findAudioButtonForVideo?.(vid);
+              if (audioBtn && RR.domUtils?.isAudioButtonMuted?.(audioBtn, vid)) {
+                RR.domUtils.triggerClick(audioBtn);
+              }
+            }
+          }, 100);
+        } else if (S.userMuted === true) {
+          if (!vid.muted) {
+            vid.muted = true;
+          }
+        }
+      }
+    }, true);
+
+    // Keep S.userMuted in sync if the user manually toggles audio using Instagram's on-screen button
+    document.addEventListener('volumechange', (e) => {
+      const vid = e.target;
+      if (vid.tagName !== 'VIDEO' || vid.id === 'reel-queue-video') return;
+      if (document.documentElement?.dataset?.rrQueuePlaying === '1') return;
+      S.userMuted = vid.muted;
     }, true);
   }
 
@@ -169,6 +225,7 @@
     setupScrollReset();
     setupVideoPlayReset();
     RR.focus.setupScroll();
+    RR.queue?.init?.();
 
     toggleButton(isReelsPage());
   }

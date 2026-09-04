@@ -11,18 +11,31 @@
   "content_scripts": [
     {
       "matches": ["https://www.instagram.com/*"],
+      "js": ["src/bridge.js"],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://www.instagram.com/*"],
       "js": [
         "src/state.js",
         "src/dom-utils.js",
         "src/rotation.js",
         "src/focus.js",
         "src/actions.js",
+        "src/queue.js",
         "src/ui.js",
         "src/keymap.js",
         "content.js"
       ],
       "css": ["styles.css"],
       "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["src/bridge.js"],
+      "matches": ["https://www.instagram.com/*"]
     }
   ],
   "icons": {
