@@ -97,8 +97,22 @@
     });
   }
 
+  function checkAndRedirectReels() {
+    try {
+      const path = window.location.pathname;
+      const m = path.match(/^\/reels\/([A-Za-z0-9_-]{5,})\/?$/i);
+      const reserved = ['audio', 'videos', 'tab', 'tagged', 'explore', 'channel'];
+      if (m && !reserved.includes(m[1].toLowerCase())) {
+        const target = '/reel/' + m[1] + '/' + window.location.search + window.location.hash;
+        window.location.replace(target);
+      }
+    } catch (_) {}
+  }
+
   function setupUrlChangeDetection() {
     let lastUrl = window.location.href;
+
+    checkAndRedirectReels();
 
     const originalPushState = history.pushState;
     const originalReplaceState = history.replaceState;
@@ -114,6 +128,7 @@
     window.addEventListener('popstate', handleUrlChange);
 
     function handleUrlChange() {
+      checkAndRedirectReels();
       const currentUrl = window.location.href;
       if (currentUrl !== lastUrl) {
         lastUrl = currentUrl;

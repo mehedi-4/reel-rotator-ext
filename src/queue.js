@@ -31,6 +31,9 @@
   let toastEl = null;
   let draggedIndex = null;
   let feedMuteWatcher = null;
+  let errorOverlayEl = null;
+  let errorTextEl = null;
+  let _mediaErrorRetries = 0;
 
   // ── Helper: Deep Search for Playable Video URL ──────────────────────
   function searchReactForVideoUrl(root, maxDepth = 8) {
@@ -141,7 +144,7 @@
     return currentSrc || null;
   }
 
-  function requestMainWorldVideoData(timeoutMs = 400) {
+  function requestMainWorldVideoData(timeoutMs = 400, permalink = null) {
     return new Promise((resolve) => {
       const reqId = 'rq-res-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
       let timer = null;
@@ -158,13 +161,54 @@
       }
 
       window.addEventListener('RR_RESOLVE_VIDEO_RES', onResponse);
-      window.dispatchEvent(new CustomEvent('RR_RESOLVE_VIDEO_REQ', { detail: { reqId } }));
+      window.dispatchEvent(new CustomEvent('RR_RESOLVE_VIDEO_REQ', { detail: { reqId, permalink } }));
 
       timer = setTimeout(() => {
         window.removeEventListener('RR_RESOLVE_VIDEO_RES', onResponse);
         resolve({ url: null, permalink: null });
       }, timeoutMs);
     });
+  }
+
+  // ── Helper: URL Extraction & Normalization ──────────────────────────
+  function extractReelShortcode(url) {
+    if (!url || typeof url !== 'string') return null;
+    const m = url.match(/\/(?:reels|reel|p)\/([A-Za-z0-9_-]{5,})/i);
+    const reserved = ['audio', 'videos', 'tab', 'tagged', 'explore', 'channel'];
+    if (m && !reserved.includes(m[1].toLowerCase())) {
+      return m[1];
+    }
+    return null;
+  }
+
+  function normalizeReelUrl(url) {
+    if (!url || typeof url !== 'string') return null;
+    const shortcode = extractReelShortcode(url);
+    if (shortcode) {
+      return `https://www.instagram.com/reel/${shortcode}/`;
+    }
+    return url;
+  }
+
+  function findReelPermalink(container, video) {
+    const roots = [
+      container,
+      video?.closest('article, [role="article"], div[style*="scroll-snap"]'),
+      video?.parentElement,
+      video?.parentElement?.parentElement,
+    ].filter(Boolean);
+
+    for (const root of roots) {
+      const links = root.querySelectorAll('a[href]');
+      for (const a of links) {
+        const href = a.getAttribute('href') || a.href || '';
+        const sc = extractReelShortcode(href);
+        if (sc) {
+          return `https://www.instagram.com/reel/${sc}/`;
+        }
+      }
+    }
+    return null;
   }
 
   // ── Helper: Capture Active Reel Metadata ────────────────────────────
@@ -265,19 +309,21 @@
       caption = captionEl.textContent.trim().slice(0, 75);
     }
 
-    // Extract permalink if available
-    let permalink = overridePermalink || null;
+    // Extract permalink if available, guaranteeing singular /reel/:shortcode/ format
+    let permalink = null;
+    if (overridePermalink) {
+      permalink = normalizeReelUrl(overridePermalink);
+    }
     if (!permalink) {
-      const linkEl = (container ? container.querySelector('a[href*="/reel/"], a[href*="/p/"]') : null) ||
-                     video.closest('article, [role="article"], div[style*="scroll-snap"]')?.querySelector('a[href*="/reel/"], a[href*="/p/"]');
-      if (linkEl && linkEl.href) {
-        permalink = linkEl.href;
-      } else if (window.location.pathname.startsWith('/reel/') || window.location.pathname.startsWith('/p/')) {
-        permalink = window.location.href;
-      } else {
-        permalink = window.location.href;
+      permalink = findReelPermalink(container, video);
+    }
+    if (!permalink) {
+      const locSc = extractReelShortcode(window.location.pathname);
+      if (locSc) {
+        permalink = `https://www.instagram.com/reel/${locSc}/`;
       }
     }
+    permalink = normalizeReelUrl(permalink);
 
     // Extract thumbnail
     let thumbnail = video.poster || null;
@@ -321,12 +367,13 @@
 
   // ── Open Reel in New Tab (Middle click / scroll wheel) ───────────────
   function openReelInNewTab(url) {
-    if (!url) {
+    const targetUrl = normalizeReelUrl(url);
+    if (!targetUrl || !extractReelShortcode(targetUrl)) {
       showToast('Reel URL not available');
       return;
     }
     try {
-      const win = window.open(url, '_blank');
+      const win = window.open(targetUrl, '_blank');
       if (win) {
         win.opener = null;
         showToast('Opening reel in new tab ↗');
@@ -335,7 +382,7 @@
       }
     } catch (_) {
       const a = document.createElement('a');
-      a.href = url;
+      a.href = targetUrl;
       a.target = '_blank';
       a.rel = 'noopener noreferrer';
       document.body.appendChild(a);
@@ -355,13 +402,21 @@
     if (!videoEl || !videoEl.src || S.queueIndex === -1) return;
     if (videoEl.paused) {
       // Unmute and play
+      hideMediaErrorOverlay();
       S.queueAudioTarget = 'queue';
       videoEl.muted = false;
       applyAudioTarget();
       videoEl.play().catch((err) => {
-        console.warn('[Queue] Play blocked:', err);
-        videoEl.muted = true;
-        videoEl.pause();
+        if (err && (err.name === 'NotAllowedError' || err.name === 'AbortError')) {
+          console.info('[Queue] Autoplay policy restricted unmuted play on toggle; playing muted');
+          videoEl.muted = true;
+          videoEl.play().catch(() => {});
+          showToast('Playing muted · Press M or T to unmute');
+        } else {
+          console.warn('[Queue] Play blocked:', err);
+          videoEl.muted = true;
+          videoEl.pause();
+        }
       });
       showToast('Queue Playing ▶');
     } else {
@@ -378,10 +433,18 @@
     if (!videoEl || !videoEl.src || S.queueIndex === -1) return;
     if (videoEl.muted) {
       // Unmute and play
+      hideMediaErrorOverlay();
       S.queueAudioTarget = 'queue';
       videoEl.muted = false;
       applyAudioTarget();
-      videoEl.play().catch(() => {});
+      videoEl.play().catch((err) => {
+        if (err && (err.name === 'NotAllowedError' || err.name === 'AbortError')) {
+          console.info('[Queue] Unmute blocked by browser policy; click player to enable audio');
+          videoEl.muted = true;
+          videoEl.play().catch(() => {});
+          showToast('Click player to enable audio 🔊');
+        }
+      });
       showToast('Queue Unmuted & Playing 🔊');
     } else {
       // Mute and pause
@@ -561,6 +624,9 @@
     S.queueIndex = index;
     const item = S.queue[index];
 
+    hideMediaErrorOverlay();
+    _mediaErrorRetries = 0;
+
     if (videoEl) {
       if (videoEl.src !== item.src) {
         videoEl.src = item.src;
@@ -582,9 +648,26 @@
       const playPromise = videoEl.play();
       if (playPromise !== undefined) {
         playPromise.catch((err) => {
-          console.warn('[Queue] Unmuted play blocked by browser autoplay policy, trying muted:', err);
-          videoEl.muted = true;
-          videoEl.pause();
+          if (err && (err.name === 'NotAllowedError' || err.name === 'AbortError')) {
+            console.info('[Queue] Unmuted play restricted by browser autoplay policy, starting muted');
+            videoEl.muted = true;
+            const mutedPromise = videoEl.play();
+            if (mutedPromise !== undefined) {
+              mutedPromise.then(() => {
+                showToast('Playing muted · Press M or T to unmute');
+                updateNowPlayingUI();
+                syncQueuePlayingFlag();
+              }).catch((mutedErr) => {
+                console.warn('[Queue] Muted playback error:', mutedErr);
+                updateNowPlayingUI();
+                syncQueuePlayingFlag();
+              });
+            }
+          } else {
+            console.warn('[Queue] Video playback failed:', err);
+            updateNowPlayingUI();
+            syncQueuePlayingFlag();
+          }
         });
       }
     }
@@ -616,12 +699,11 @@
     // 1. Try matching shortcode in permalink
     let shortcode = null;
     if (item.permalink) {
-      const m = item.permalink.match(/\/reel\/([A-Za-z0-9_-]+)/) || item.permalink.match(/\/p\/([A-Za-z0-9_-]+)/);
-      if (m) shortcode = m[1];
+      shortcode = extractReelShortcode(item.permalink);
     }
 
     if (shortcode) {
-      const links = document.querySelectorAll(`a[href*="/reel/${shortcode}"], a[href*="/p/${shortcode}"]`);
+      const links = document.querySelectorAll(`a[href*="/reel/${shortcode}"], a[href*="/p/${shortcode}"], a[href*="/reels/${shortcode}"]`);
       for (const link of links) {
         if (link.closest('#reel-queue-panel')) continue;
         const container = link.closest('article, [role="article"], div[style*="scroll-snap"]') || link.parentElement;
@@ -1026,6 +1108,134 @@
     updateNowPlayingUI();
   }
 
+  // ── Media Error Recovery & Overlay ──────────────────────────────────
+  function showMediaErrorOverlay(item) {
+    if (!errorOverlayEl) return;
+    errorOverlayEl.classList.remove('hidden');
+    if (errorTextEl) {
+      errorTextEl.textContent = item?.author
+        ? `Video source expired (@${item.author})`
+        : 'Video source expired or unavailable';
+    }
+  }
+
+  function hideMediaErrorOverlay() {
+    if (errorOverlayEl) {
+      errorOverlayEl.classList.add('hidden');
+    }
+  }
+
+  async function retryCurrentQueueVideo() {
+    if (S.queueIndex === -1 || !S.queue || !S.queue[S.queueIndex] || !videoEl) return;
+    const item = S.queue[S.queueIndex];
+    showToast('Refreshing video source...');
+    hideMediaErrorOverlay();
+    _mediaErrorRetries = 0;
+
+    // 1. Try resolving via bridge with permalink
+    try {
+      const res = await requestMainWorldVideoData(500, item.permalink);
+      if (res?.url && res.url !== videoEl.src) {
+        item.src = res.url;
+        videoEl.src = res.url;
+        videoEl.load();
+        videoEl.play().catch(() => {});
+        showToast('Video source refreshed ↻');
+        return;
+      }
+    } catch (_) {}
+
+    // 2. Try matching DOM container
+    const container = findContainerForItem(item);
+    if (container) {
+      const v = container.querySelector('video');
+      const freshSrc = v?.currentSrc || v?.src;
+      if (freshSrc && freshSrc !== videoEl.src && !freshSrc.startsWith('blob:')) {
+        item.src = freshSrc;
+        videoEl.src = freshSrc;
+        videoEl.load();
+        videoEl.play().catch(() => {});
+        showToast('Video source refreshed ↻');
+        return;
+      }
+    }
+
+    // 3. Try recent media url
+    const recent = findRecentMediaUrl();
+    if (recent && recent !== videoEl.src) {
+      item.src = recent;
+      videoEl.src = recent;
+      videoEl.load();
+      videoEl.play().catch(() => {});
+      showToast('Video source refreshed ↻');
+      return;
+    }
+
+    // 4. Force reload existing src
+    videoEl.load();
+    videoEl.play().catch((err) => {
+      console.warn('[Queue] Retry failed:', err);
+      showMediaErrorOverlay(item);
+      showToast('Could not refresh source · Open reel in new tab');
+    });
+  }
+
+  async function handleQueueVideoError() {
+    if (S.queueIndex === -1 || !S.queue || !S.queue[S.queueIndex] || !videoEl) return;
+    const item = S.queue[S.queueIndex];
+
+    console.warn('[Queue] Video media error encountered:', videoEl.error);
+
+    if (_mediaErrorRetries >= 2) {
+      showMediaErrorOverlay(item);
+      showToast('Reel source expired · Middle-click to open in new tab');
+      return;
+    }
+    _mediaErrorRetries++;
+
+    // 1. Check if the reel is present in the DOM feed
+    const container = findContainerForItem(item);
+    if (container) {
+      const v = container.querySelector('video');
+      const liveSrc = v?.currentSrc || v?.src;
+      if (liveSrc && liveSrc !== videoEl.src && !liveSrc.startsWith('blob:')) {
+        console.log('[Queue] Recovered video source from DOM feed container');
+        item.src = liveSrc;
+        videoEl.src = liveSrc;
+        videoEl.load();
+        videoEl.play().catch(() => {});
+        return;
+      }
+    }
+
+    // 2. Request fresh video data via bridge
+    try {
+      const res = await requestMainWorldVideoData(400, item.permalink);
+      if (res?.url && res.url !== videoEl.src) {
+        console.log('[Queue] Recovered video source via bridge');
+        item.src = res.url;
+        videoEl.src = res.url;
+        videoEl.load();
+        videoEl.play().catch(() => {});
+        return;
+      }
+    } catch (_) {}
+
+    // 3. Check performance entries
+    const fallback = findRecentMediaUrl();
+    if (fallback && fallback !== videoEl.src) {
+      console.log('[Queue] Recovered with recent media URL:', fallback);
+      item.src = fallback;
+      videoEl.src = fallback;
+      videoEl.load();
+      videoEl.play().catch(() => {});
+      return;
+    }
+
+    showMediaErrorOverlay(item);
+    showToast('Reel source expired · Middle-click to open in new tab');
+  }
+
   // ── DOM Construction ────────────────────────────────────────────────
   function buildQueueUI() {
     if (document.getElementById('reel-queue-panel')) return;
@@ -1079,6 +1289,18 @@
         <video id="reel-queue-video" playsinline preload="auto" crossorigin="anonymous"></video>
         <div id="reel-queue-center-play" class="rq-center-play" title="Play">
           <svg width="36" height="36" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20"></polygon></svg>
+        </div>
+        <div id="reel-queue-error-overlay" class="rq-error-overlay hidden">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ed4956" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+          <span id="reel-queue-error-text" class="rq-error-text">Video source expired or unavailable</span>
+          <div class="rq-error-actions">
+            <button type="button" id="reel-queue-retry-btn" class="rq-error-btn">Retry</button>
+            <button type="button" id="reel-queue-open-btn" class="rq-error-btn rq-error-btn-accent">Open Reel ↗</button>
+          </div>
         </div>
         <div id="reel-queue-overlay-controls">
           <button type="button" id="reel-queue-prev-btn" class="rq-ctrl-btn" title="Previous reel (W / ↑)">
@@ -1150,7 +1372,22 @@
     progressBarEl = panelEl.querySelector('#reel-queue-progress-bar');
     progressFillEl = panelEl.querySelector('#reel-queue-progress-fill');
     timeDisplayEl = panelEl.querySelector('#reel-queue-time');
+    errorOverlayEl = panelEl.querySelector('#reel-queue-error-overlay');
+    errorTextEl = panelEl.querySelector('#reel-queue-error-text');
+    const retryBtn = panelEl.querySelector('#reel-queue-retry-btn');
+    const openBtn = panelEl.querySelector('#reel-queue-open-btn');
     const playerWrap = panelEl.querySelector('#reel-queue-player-wrap');
+
+    retryBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      retryCurrentQueueVideo();
+    });
+    openBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (S.queueIndex !== -1 && S.queue && S.queue[S.queueIndex]) {
+        openReelInNewTab(S.queue[S.queueIndex].permalink);
+      }
+    });
 
     // Header events
     audioBadgeEl?.addEventListener('click', toggleAudioFocus);
@@ -1241,14 +1478,7 @@
       }
     });
     videoEl?.addEventListener('error', () => {
-      console.warn('[Queue] Video error, attempting fallback source:', videoEl.error);
-      const fallback = findRecentMediaUrl();
-      if (fallback && fallback !== videoEl.src) {
-        console.log('[Queue] Recovering with recent media URL:', fallback);
-        videoEl.src = fallback;
-        videoEl.load();
-        videoEl.play().catch(() => {});
-      }
+      handleQueueVideoError();
     });
     videoEl?.addEventListener('timeupdate', () => {
       if (!videoEl.duration) return;

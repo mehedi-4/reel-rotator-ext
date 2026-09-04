@@ -9,6 +9,47 @@
   if (window.__reelBridgeLoaded) return;
   window.__reelBridgeLoaded = true;
 
+  // ── Early URL Normalization for Desktop Reels ────────────────────────
+  // On Instagram Web, URLs formatted as /reels/:shortcode/ route to the infinite
+  // recommendation feed rather than loading the individual reel (/reel/:shortcode/).
+  // Rewriting early at document_start ensures the browser opens the intended reel!
+  (function fixReelsPathEarly() {
+    try {
+      const path = window.location.pathname;
+      const m = path.match(/^\/reels\/([A-Za-z0-9_-]{5,})\/?$/i);
+      const reserved = ['audio', 'videos', 'tab', 'tagged', 'explore', 'channel'];
+      if (m && !reserved.includes(m[1].toLowerCase())) {
+        const target = '/reel/' + m[1] + '/' + window.location.search + window.location.hash;
+        window.location.replace(target);
+      }
+    } catch (_) {}
+  })();
+
+  // Intercept client-side SPA navigation to /reels/:shortcode/
+  try {
+    const origPushState = history.pushState;
+    const origReplaceState = history.replaceState;
+    function normalizeReelsPath(url) {
+      if (!url) return url;
+      try {
+        const u = new URL(url, window.location.origin);
+        const m = u.pathname.match(/^\/reels\/([A-Za-z0-9_-]{5,})\/?$/i);
+        const reserved = ['audio', 'videos', 'tab', 'tagged', 'explore', 'channel'];
+        if (m && !reserved.includes(m[1].toLowerCase())) {
+          u.pathname = '/reel/' + m[1] + '/';
+          return u.toString();
+        }
+      } catch (_) {}
+      return url;
+    }
+    history.pushState = function (state, title, url) {
+      return origPushState.call(this, state, title, normalizeReelsPath(url));
+    };
+    history.replaceState = function (state, title, url) {
+      return origReplaceState.call(this, state, title, normalizeReelsPath(url));
+    };
+  } catch (_) {}
+
   function searchReactForVideoUrl(root, maxDepth = 10) {
     if (!root || typeof root !== 'object') return null;
     const visited = new Set();
@@ -110,6 +151,19 @@
     return currentSrc || null;
   }
 
+  function extractShortcodeFromValue(val) {
+    if (typeof val !== 'string') return null;
+    const m = val.match(/\/(?:reels|reel|p)\/([A-Za-z0-9_-]{5,})/i);
+    const reserved = ['audio', 'videos', 'tab', 'tagged', 'explore', 'channel'];
+    if (m && !reserved.includes(m[1].toLowerCase())) {
+      return m[1];
+    }
+    if (/^[A-Za-z0-9_-]{8,15}$/.test(val) && !reserved.includes(val.toLowerCase())) {
+      return val;
+    }
+    return null;
+  }
+
   function searchReactForPermalink(root, maxDepth = 10) {
     if (!root || typeof root !== 'object') return null;
     const visited = new Set();
@@ -120,15 +174,16 @@
       if (!node || typeof node !== 'object' || visited.has(node) || d > maxDepth) continue;
       visited.add(node);
 
-      if (typeof node.code === 'string' && node.code.length >= 8 && node.code.length <= 15) {
-        return `https://www.instagram.com/reel/${node.code}/`;
-      }
-      if (typeof node.shortcode === 'string' && node.shortcode.length >= 8 && node.shortcode.length <= 15) {
-        return `https://www.instagram.com/reel/${node.shortcode}/`;
+      const candidateKeys = ['code', 'shortcode', 'canonical_url', 'permalink', 'share_url'];
+      for (const k of candidateKeys) {
+        if (node[k]) {
+          const sc = extractShortcodeFromValue(node[k]);
+          if (sc) return `https://www.instagram.com/reel/${sc}/`;
+        }
       }
 
       if (d < maxDepth) {
-        const priorityKeys = ['memoizedProps', 'props', 'item', 'clip', 'video', 'return'];
+        const priorityKeys = ['memoizedProps', 'props', 'item', 'clip', 'video', 'post', 'media', 'return'];
         for (const pk of priorityKeys) {
           if (node[pk] && typeof node[pk] === 'object') {
             queue.push({ node: node[pk], d: d + 1 });
@@ -168,17 +223,39 @@
   // Listen for resolution requests from the content script
   window.addEventListener('RR_RESOLVE_VIDEO_REQ', (e) => {
     const reqId = e.detail?.reqId;
-    const videos = Array.from(document.querySelectorAll('video:not(#reel-queue-video)'));
+    const permalink = e.detail?.permalink;
+    let targetShortcode = e.detail?.shortcode || null;
+    if (!targetShortcode && permalink) {
+      targetShortcode = extractShortcodeFromValue(permalink);
+    }
 
     let targetVideo = null;
-    for (const v of videos) {
-      if (!v.paused && !v.ended && v.readyState > 2) {
-        targetVideo = v;
-        break;
+    if (targetShortcode) {
+      const links = Array.from(document.querySelectorAll(`a[href*="/reel/${targetShortcode}"], a[href*="/p/${targetShortcode}"], a[href*="/reels/${targetShortcode}"]`));
+      for (const link of links) {
+        if (link.closest('#reel-queue-panel')) continue;
+        const container = link.closest('article, [role="article"], div[style*="scroll-snap"]') || link.parentElement;
+        if (container) {
+          const v = container.querySelector('video');
+          if (v) {
+            targetVideo = v;
+            break;
+          }
+        }
       }
     }
-    if (!targetVideo && videos.length > 0) {
-      targetVideo = videos[0];
+
+    if (!targetVideo) {
+      const videos = Array.from(document.querySelectorAll('video:not(#reel-queue-video)'));
+      for (const v of videos) {
+        if (!v.paused && !v.ended && v.readyState > 2) {
+          targetVideo = v;
+          break;
+        }
+      }
+      if (!targetVideo && videos.length > 0) {
+        targetVideo = videos[0];
+      }
     }
 
     const resolvedUrl = resolveVideoFromElement(targetVideo);
@@ -198,12 +275,11 @@
     const { action, permalink } = e.detail || {};
     let shortcode = null;
     if (permalink) {
-      const m = permalink.match(/\/reel\/([A-Za-z0-9_-]+)/) || permalink.match(/\/p\/([A-Za-z0-9_-]+)/);
-      if (m) shortcode = m[1];
+      shortcode = extractShortcodeFromValue(permalink);
     }
 
     if (shortcode) {
-      const links = Array.from(document.querySelectorAll(`a[href*="/reel/${shortcode}"], a[href*="/p/${shortcode}"]`));
+      const links = Array.from(document.querySelectorAll(`a[href*="/reel/${shortcode}"], a[href*="/p/${shortcode}"], a[href*="/reels/${shortcode}"]`));
       for (const link of links) {
         if (link.closest('#reel-queue-panel')) continue;
         const root = link.closest('article, [role="article"], div[style*="scroll-snap"]') || link.parentElement;
