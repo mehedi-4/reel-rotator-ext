@@ -9,47 +9,6 @@
   if (window.__reelBridgeLoaded) return;
   window.__reelBridgeLoaded = true;
 
-  // ── Early URL Normalization for Desktop Reels ────────────────────────
-  // On Instagram Web, URLs formatted as /reels/:shortcode/ route to the infinite
-  // recommendation feed rather than loading the individual reel (/reel/:shortcode/).
-  // Rewriting early at document_start ensures the browser opens the intended reel!
-  (function fixReelsPathEarly() {
-    try {
-      const path = window.location.pathname;
-      const m = path.match(/^\/reels\/([A-Za-z0-9_-]{5,})\/?$/i);
-      const reserved = ['audio', 'videos', 'tab', 'tagged', 'explore', 'channel'];
-      if (m && !reserved.includes(m[1].toLowerCase())) {
-        const target = '/reel/' + m[1] + '/' + window.location.search + window.location.hash;
-        window.location.replace(target);
-      }
-    } catch (_) {}
-  })();
-
-  // Intercept client-side SPA navigation to /reels/:shortcode/
-  try {
-    const origPushState = history.pushState;
-    const origReplaceState = history.replaceState;
-    function normalizeReelsPath(url) {
-      if (!url) return url;
-      try {
-        const u = new URL(url, window.location.origin);
-        const m = u.pathname.match(/^\/reels\/([A-Za-z0-9_-]{5,})\/?$/i);
-        const reserved = ['audio', 'videos', 'tab', 'tagged', 'explore', 'channel'];
-        if (m && !reserved.includes(m[1].toLowerCase())) {
-          u.pathname = '/reel/' + m[1] + '/';
-          return u.toString();
-        }
-      } catch (_) {}
-      return url;
-    }
-    history.pushState = function (state, title, url) {
-      return origPushState.call(this, state, title, normalizeReelsPath(url));
-    };
-    history.replaceState = function (state, title, url) {
-      return origReplaceState.call(this, state, title, normalizeReelsPath(url));
-    };
-  } catch (_) {}
-
   function searchReactForVideoUrl(root, maxDepth = 10) {
     if (!root || typeof root !== 'object') return null;
     const visited = new Set();
