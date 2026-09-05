@@ -865,6 +865,21 @@
     return false;
   }
 
+  function getReelActionState(video, action) {
+    if (!video) return null;
+    const btn = action === 'repost'
+      ? findRepostButtonForVideo(video)
+      : findLikeButtonForVideo(video);
+    if (!btn) return null;
+
+    return (
+      btn.getAttribute('aria-label') ||
+      btn.querySelector('svg')?.getAttribute('aria-label') ||
+      btn.textContent ||
+      ''
+    ).trim().toLowerCase();
+  }
+
   /**
    * True if the current page is a Reels surface (path matches /reels or /reel/).
    */
@@ -883,6 +898,7 @@
     isAudioButtonMuted,
     triggerClick,
     clickReelButton,
+    getReelActionState,
     tryConfirmRemoveRepost,
     autoConfirmRepostRemoval,
     isReelsPage,

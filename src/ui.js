@@ -65,6 +65,26 @@
     S.btn.classList.toggle('focus-active', !!active);
   }
 
+  function showFocusStatus(message) {
+    if (!S.focusMode || !message) return;
+
+    let status = document.getElementById('reel-focus-action-status');
+    if (!status) {
+      status = document.createElement('div');
+      status.id = 'reel-focus-action-status';
+      document.body.appendChild(status);
+    }
+
+    status.textContent = message;
+    status.classList.remove('visible');
+    requestAnimationFrame(() => status.classList.add('visible'));
+
+    if (status._hideTimer) clearTimeout(status._hideTimer);
+    status._hideTimer = setTimeout(() => {
+      status.classList.remove('visible');
+    }, 1200);
+  }
+
   function toggleButton(show) {
     if (!S.btn) return;
     if (show) S.btn.classList.add('visible');
@@ -79,6 +99,7 @@
   function resetIfActive() {
     if (S.focusMode) RR.focus.exit();
     if (S.rotatedVideo) RR.rotation.resetRotation(S.rotatedVideo);
+    document.getElementById('reel-focus-action-status')?.remove();
   }
 
   // ── Observers / event wiring ─────────────────────────────────────────
@@ -227,6 +248,7 @@
     createButton,
     updateButtonState,
     setFocusButtonActive,
+    showFocusStatus,
     toggleButton,
     resetIfActive,
   };

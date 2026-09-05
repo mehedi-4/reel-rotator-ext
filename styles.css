@@ -100,6 +100,27 @@
   background: rgba(234, 179, 8, 0.95);
 }
 
+#reel-focus-action-status {
+  position: fixed;
+  left: 50%;
+  bottom: 12%;
+  z-index: 1000002;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.78);
+  color: #fff;
+  font: 600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 8px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+#reel-focus-action-status.visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
 /* ─── Reels Queue Feature ─────────────────────────────────────────── */
 
 #reel-queue-toggle-btn {
@@ -758,5 +779,4 @@
   background: #1877f2;
   border-color: #1877f2;
 }
-
 

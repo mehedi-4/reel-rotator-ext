@@ -8,6 +8,7 @@
   'use strict';
 
   const RR = window.__reelRotator;
+  const S = RR.state;
   const { findActiveVideo, clickReelButton } = RR.domUtils;
 
   function getTargetVideo() {
@@ -24,6 +25,8 @@
   /** Toggle like on the active reel. Native Instagram button is already a toggle. */
   function reactLike() {
     const video = getTargetVideo();
+    const likeState = RR.domUtils?.getReelActionState?.(video, 'like') || '';
+    const wasLiked = likeState.includes('unlike') || likeState.includes('liked');
     const clicked = clickReelButton(video, ['Like', 'Unlike']);
     if (!clicked && video) {
       // Fallback: simulate double click on the active video and its overlay wrapper
@@ -44,6 +47,9 @@
         }
       } catch (_) {}
     }
+    if (S.focusMode) {
+      RR.ui?.showFocusStatus?.(wasLiked ? 'Unliked' : 'Liked');
+    }
   }
 
   /** Keep video playing if it was playing before a dialog or action interrupted it. */
@@ -61,11 +67,15 @@
   /** Toggle repost on the active reel. Native Instagram button toggles repost. */
   function repost() {
     const video = getTargetVideo();
+    const repostState = RR.domUtils?.getReelActionState?.(video, 'repost') || '';
+    const wasReposted = repostState.includes('reposted') ||
+      repostState.includes('undo') || repostState.includes('remove');
     const wasPlaying = video ? (!video.paused && !video.ended) : false;
 
     // 1. If an Undo toast or Remove confirmation dialog is already open, confirm it immediately
     if (RR.domUtils?.tryConfirmRemoveRepost?.()) {
       if (wasPlaying) restorePlayback(video);
+      if (S.focusMode) RR.ui?.showFocusStatus?.('Unreposted');
       return;
     }
 
@@ -79,6 +89,9 @@
       });
       if (wasPlaying) {
         restorePlayback(video);
+      }
+      if (S.focusMode) {
+        RR.ui?.showFocusStatus?.(wasReposted ? 'Unreposted' : 'Reposted');
       }
     }
   }
