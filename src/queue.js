@@ -456,6 +456,55 @@
     updateNowPlayingUI();
   }
 
+  // ── Volume / Playback Speed (Shift+W / Shift+S / Shift+1..4) ────────
+  // Mute stays exclusively on M (and toggles play/pause in the queue);
+  // volume never drops below VOLUME_FLOOR and never mutes on its own.
+  // Feedback goes through ui.showStatusToast so it lands above the video
+  // even when the queue video itself is lifted into focus mode.
+  function statusToast(msg) {
+    if (RR.ui?.showStatusToast) RR.ui.showStatusToast(msg);
+    else showToast(msg);
+  }
+
+  function adjustVolume(direction) {
+    if (!videoEl || !videoEl.src || S.queueIndex === -1) return;
+    const { VOLUME_STEP: step, VOLUME_FLOOR: floor } = RR.constants;
+
+    if (videoEl.muted) {
+      if (direction < 0) {
+        statusToast('Muted · Shift+W to unmute');
+        return;
+      }
+      toggleMute();
+      if (videoEl.volume < floor) {
+        videoEl.volume = floor;
+      }
+      S.userVolume = videoEl.volume;
+      statusToast(`Queue 🔊 ${Math.round(videoEl.volume * 100)}%`);
+      return;
+    }
+
+    const target = direction > 0
+      ? Math.min(1, Math.round((videoEl.volume + step) * 10) / 10)
+      : Math.max(floor, Math.round((videoEl.volume - step) * 10) / 10);
+
+    if (target === videoEl.volume) {
+      statusToast(`Queue 🔊 ${Math.round(videoEl.volume * 100)}% (${direction > 0 ? 'max' : 'min'})`);
+      return;
+    }
+
+    videoEl.volume = target;
+    S.userVolume = target;
+    statusToast(`Queue 🔊 ${Math.round(target * 100)}%`);
+  }
+
+  function setPlaybackRate(rate) {
+    if (!videoEl || !videoEl.src || S.queueIndex === -1) return;
+    videoEl.playbackRate = rate;
+    S.userPlaybackRate = rate;
+    statusToast(`Queue ${rate}× speed`);
+  }
+
   // ── Audio Coordination & Strict Feed Mute Enforcement ───────────────
   function isQueuePlaying() {
     if (!videoEl || !videoEl.src || S.queueIndex === -1 || S.queueAudioTarget !== 'queue') {
@@ -1558,6 +1607,8 @@
     toggleAudioFocus,
     togglePlayPause,
     toggleMute,
+    adjustVolume,
+    setPlaybackRate,
     openPanel,
     closePanel,
     togglePanel,

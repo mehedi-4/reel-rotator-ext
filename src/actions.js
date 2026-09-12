@@ -146,10 +146,69 @@
     });
   }
 
+  /**
+   * Adjust the volume of the active reel (Shift+W / Shift+S).
+   * direction: +1 raises, -1 lowers. Never drops below VOLUME_FLOOR (5%)
+   * and never mutes — muting stays exclusively on M. Raising the volume of
+   * a muted video unmutes it first via toggleMute so Instagram's React
+   * audio state and speaker icon stay in sync.
+   */
+  function adjustVolume(direction) {
+    const video = getTargetVideo();
+    if (!video) return;
+
+    const S = RR.state;
+    const { VOLUME_STEP: step, VOLUME_FLOOR: floor } = RR.constants;
+
+    if (video.muted) {
+      if (direction < 0) {
+        // Lowering a muted video does nothing audible; mute is M's job.
+        RR.ui?.showStatusToast?.('Muted · Shift+W to unmute');
+        return;
+      }
+      toggleMute();
+      if (video.volume < floor) {
+        video.volume = floor;
+      }
+      S.userVolume = video.volume;
+      RR.ui?.showStatusToast?.(`🔊 ${Math.round(video.volume * 100)}%`);
+      return;
+    }
+
+    const target = direction > 0
+      ? Math.min(1, Math.round((video.volume + step) * 10) / 10)
+      : Math.max(floor, Math.round((video.volume - step) * 10) / 10);
+
+    if (target === video.volume) {
+      // Already pinned at 100% (max) or the 5% floor (min).
+      RR.ui?.showStatusToast?.(`🔊 ${Math.round(video.volume * 100)}% (${direction > 0 ? 'max' : 'min'})`);
+      return;
+    }
+
+    video.volume = target;
+    S.userVolume = target;
+    RR.ui?.showStatusToast?.(`🔊 ${Math.round(target * 100)}%`);
+  }
+
+  /**
+   * Set the playback speed of the active reel (Shift+1..4 → 1x / 1.25x /
+   * 1.5x / 2x). Stored in S.userPlaybackRate and re-asserted on subsequent
+   * reels, so the preference survives navigation.
+   */
+  function setPlaybackRate(rate) {
+    const video = getTargetVideo();
+    if (!video) return;
+    video.playbackRate = rate;
+    RR.state.userPlaybackRate = rate;
+    RR.ui?.showStatusToast?.(`${rate}× speed`);
+  }
+
   // ── Expose ──────────────────────────────────────────────────────────
   RR.actions = {
     reactLike,
     repost,
     toggleMute,
+    adjustVolume,
+    setPlaybackRate,
   };
 })();

@@ -85,6 +85,39 @@
     }, 1200);
   }
 
+  /**
+   * Mode-agnostic feedback toast for volume / playback-rate shortcuts.
+   * In focus mode the focused video (z-index 1000001) and backdrop sit
+   * ABOVE the regular toast (z-index 999999), so we switch to the focus
+   * status overlay there. Otherwise reuse the queue's toast element
+   * (same visual, one element) — creating it defensively if the queue
+   * hasn't built it yet.
+   */
+  function showStatusToast(message) {
+    if (!message) return;
+    if (S.focusMode) {
+      showFocusStatus(message);
+      return;
+    }
+
+    let toast = document.getElementById('reel-queue-toast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'reel-queue-toast';
+      toast.className = 'rq-toast';
+      document.body.appendChild(toast);
+    }
+
+    toast.textContent = message;
+    toast.classList.remove('visible');
+    requestAnimationFrame(() => toast.classList.add('visible'));
+
+    if (toast._timer) clearTimeout(toast._timer);
+    toast._timer = setTimeout(() => {
+      toast.classList.remove('visible');
+    }, 2200);
+  }
+
   function toggleButton(show) {
     if (!S.btn) return;
     if (show) S.btn.classList.add('visible');
@@ -217,6 +250,18 @@
           }
         }
       }
+
+      // Re-assert volume preference (Shift+W / Shift+S) on newly playing
+      // feed reels. Queue video is skipped — queue.js owns its own state.
+      if (vid.id !== 'reel-queue-video' && S.userVolume !== null) {
+        vid.volume = S.userVolume;
+      }
+
+      // Re-assert playback speed preference (Shift+1..4) on newly playing
+      // reels — both feed and queue video.
+      if (S.userPlaybackRate !== null) {
+        try { vid.playbackRate = S.userPlaybackRate; } catch (_) {}
+      }
     }, true);
 
     // Keep S.userMuted in sync if the user manually toggles audio using Instagram's on-screen button
@@ -249,6 +294,7 @@
     updateButtonState,
     setFocusButtonActive,
     showFocusStatus,
+    showStatusToast,
     toggleButton,
     resetIfActive,
   };

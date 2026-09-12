@@ -10,6 +10,8 @@
   const WHEEL_THRESHOLD = 40;     // deltaY units before wheel triggers navigation
   const NAV_COOLDOWN = 550;       // ms between reel changes
   const WHEEL_RESET_MS = 200;     // forget stale trackpad deltas after this
+  const VOLUME_STEP = 0.1;        // volume change per Shift+W / Shift+S press
+  const VOLUME_FLOOR = 0.05;      // Shift+S never lowers volume below 5%
 
   // ── The state object ────────────────────────────────────────────────
   // Mutable by reference; nothing else should declare duplicates of these.
@@ -41,6 +43,10 @@
     // User media preference
     userMuted: null,              // user's intended mute state (null = unset, true = muted, false = unmuted);
                                   // re-asserted after pause/play and reel navigation once set.
+    userVolume: null,             // user's intended volume (null = unset, 0..1); re-asserted like userMuted.
+
+    // Playback speed preference (Shift+1..4). null = unset; re-asserted on reel changes.
+    userPlaybackRate: null,
 
     // Queue feature state
     queue: [],                    // Array of { id, src, author, caption, thumbnail, permalink, finished }
@@ -71,6 +77,8 @@
     WHEEL_THRESHOLD,
     NAV_COOLDOWN,
     WHEEL_RESET_MS,
+    VOLUME_STEP,
+    VOLUME_FLOOR,
   };
   window.__reelRotator.reset = reset;
 })();

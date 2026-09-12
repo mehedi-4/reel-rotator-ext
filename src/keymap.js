@@ -193,6 +193,47 @@
       return true;
     }
 
+    // ── Shift+W / Shift+S: volume up/down, works in any mode ─────────
+    // Must run BEFORE the rebindable keymap loop: Shift+W/S arrive with
+    // e.key 'W'/'S', which would otherwise match the plain prev/next
+    // reel bindings (lowercased). Plain W/S (no Shift) still falls
+    // through to the keymap below. Matched on e.code so the shortcut
+    // works regardless of keyboard layout.
+    if (e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey &&
+        (e.code === 'KeyW' || e.code === 'KeyS')) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const direction = e.code === 'KeyW' ? +1 : -1;
+      if ((isQueueActive() || isMouseOverQueue()) && RR.queue?.adjustVolume) {
+        RR.queue.adjustVolume(direction);
+      } else {
+        RR.actions?.adjustVolume?.(direction);
+      }
+      return true;
+    }
+
+    // ── Shift+1..4: playback speed 1x / 1.25x / 1.5x / 2x ───────────
+    // Match on e.code (physical key) so the shortcut works on any layout:
+    // US Shift+1 produces '!', AZERTY produces '1', etc. — the code stays
+    // Digit1. Accept the literal digit char too, as a belt-and-braces
+    // fallback for layouts where the code differs.
+    if (e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      const RATE_BY_CODE = { Digit1: 1, Digit2: 1.25, Digit3: 1.5, Digit4: 2 };
+      const rate = Object.prototype.hasOwnProperty.call(RATE_BY_CODE, e.code)
+        ? RATE_BY_CODE[e.code]
+        : (['1', '2', '3', '4'].includes(e.key) ? { '1': 1, '2': 1.25, '3': 1.5, '4': 2 }[e.key] : null);
+      if (rate !== null) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if ((isQueueActive() || isMouseOverQueue()) && RR.queue?.setPlaybackRate) {
+          RR.queue.setPlaybackRate(rate);
+        } else {
+          RR.actions?.setPlaybackRate?.(rate);
+        }
+        return true;
+      }
+    }
+
     // ── Space: works in ANY mode (normal feed, focus mode, queue dock) ─
     // User requirement: "player will manually play or pause the video by pressing space.
     // right now pressing space goes to next reel in normal mode."

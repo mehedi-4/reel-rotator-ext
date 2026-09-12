@@ -57,13 +57,21 @@ Click the **Reel Rotator** icon in your toolbar to customize. Defaults:
 | Key | Mode | Action |
 |-----|------|--------|
 | `M` | Anywhere | Mute / unmute the active video (or queue if hovering over dock) |
+| `Shift+W` | Anywhere | Volume up 10% (unmutes if muted) |
+| `Shift+S` | Anywhere | Volume down 10% — never below 5% |
+| `Shift+1` | Anywhere | Playback speed 1× |
+| `Shift+2` | Anywhere | Playback speed 1.25× |
+| `Shift+3` | Anywhere | Playback speed 1.5× |
+| `Shift+4` | Anywhere | Playback speed 2× |
 | `Space` | Anywhere | Play / pause active video (prevents Instagram reel advance) |
 | `↑` | Focus only | Previous reel |
 | `↓` | Focus only | Next reel |
 | `Esc` | Focus only | Exit focus mode |
 | Click backdrop | Focus only | Exit focus mode |
 
-The user's mute preference is remembered across pause/play and reel changes inside focus mode — unmute with `M` and that preference sticks on the next reel and after a Space pause/resume.
+The user's mute preference is remembered across pause/play and reel changes inside focus mode — unmute with `M` and that preference sticks on the next reel and after a Space pause/resume. Volume and playback-speed preferences behave the same way: once set with `Shift+W`/`Shift+S` or `Shift+1`–`4`, they carry over to the next reel in the feed and in the queue dock.
+
+Volume control never touches the mute state on its own — muting is exclusively `M`'s job (raising volume on a muted video unmutes it, though, since that's what "louder" has to mean). `Shift+S` stops at 5% so a quiet reel never drops to inaudible.
 
 ### Mouse / trackpad
 
