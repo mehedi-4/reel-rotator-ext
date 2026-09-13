@@ -204,6 +204,25 @@
       }
     }
 
+    // 2. Focus mode: the focused video was re-parented to <body>, so its
+    // own fiber chain no longer reaches the reel's data. The content
+    // script tags the reel's ORIGINAL container with data-rr-focus-scope
+    // before lifting the video; resolving from a video inside that scope
+    // (or the scope itself) finds the right mp4 URL.
+    if (!targetVideo) {
+      const scope = document.querySelector('[data-rr-focus-scope]');
+      if (scope && scope !== document.body) {
+        if (scope.tagName === 'VIDEO') {
+          targetVideo = scope;
+        } else {
+          // Prefer a video still inside the scope; otherwise resolve from
+          // the scope element itself (its fibers hold the reel's data).
+          targetVideo = scope.querySelector('video');
+          if (!targetVideo) targetVideo = scope;
+        }
+      }
+    }
+
     if (!targetVideo) {
       const videos = Array.from(document.querySelectorAll('video:not(#reel-queue-video)'));
       for (const v of videos) {

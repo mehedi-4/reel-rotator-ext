@@ -57,6 +57,7 @@ Click the **Reel Rotator** icon in your toolbar to customize. Defaults:
 | Key | Mode | Action |
 |-----|------|--------|
 | `M` | Anywhere | Mute / unmute the active video (or queue if hovering over dock) |
+| `Shift+D` | Anywhere | Download / save the enabled video (queue or feed) as mp4 |
 | `Shift+W` | Anywhere | Volume up 10% (unmutes if muted) |
 | `Shift+S` | Anywhere | Volume down 10% — never below 5% |
 | `Shift+1` | Anywhere | Playback speed 1× |
@@ -88,6 +89,7 @@ Click the **Reel Rotator** icon in your Chrome / Brave toolbar to open the Setti
 ```
 reel-rotator-ext/
 ├── manifest.json          # MV3 manifest, declares split content scripts in load order
+├── background.js         # Service worker: downloads via chrome.downloads (Shift+D)
 ├── content.js             # Thin orchestrator (~30 lines: init + event wiring)
 ├── popup.html / .js / .css # Settings popup (opened via toolbar icon)
 ├── styles.css             # On-page styles (rotate button, focus backdrop, queue dock)

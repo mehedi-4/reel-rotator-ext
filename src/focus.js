@@ -232,6 +232,22 @@
       _origNextSibling: video.nextSibling,
     };
 
+    // Tag the reel's original container so the MAIN-world bridge can find
+    // it: while focused, the video lives in <body> and its React fiber
+    // chain no longer reaches the reel's data. The DOM *is* shared across
+    // worlds (unlike JS objects), so a data- attribute is visible to the
+    // bridge. resolveVideoFromElement can then walk the original
+    // container's fibers to the mp4 URL.
+    // Skipped for the queue video — its scope would be the dock's player
+    // wrap, which holds no reel fiber data and could mislead resolution.
+    document.querySelectorAll('[data-rr-focus-scope]').forEach(el => {
+      delete el.dataset.rrFocusScope;
+    });
+    const willBeQueueVideo = (video === RR.queue?.getVideoEl?.());
+    if (!willBeQueueVideo && video.parentElement && video.parentElement !== document.body) {
+      video.parentElement.dataset.rrFocusScope = '1';
+    }
+
     // Move video to <body> so it's above the backdrop (escapes stacking contexts).
     document.body.appendChild(video);
 
@@ -370,6 +386,10 @@
     // Don't gate on focusedVideo: mid-navigation the video is already back
     // in the feed, but the backdrop still needs tearing down.
     if (!S.focusMode) return;
+
+    document.querySelectorAll('[data-rr-focus-scope]').forEach(el => {
+      delete el.dataset.rrFocusScope;
+    });
 
     const video = S.focusedVideo;
     const isQueueVideo = (video === RR.queue?.getVideoEl?.());

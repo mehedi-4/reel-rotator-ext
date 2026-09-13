@@ -628,7 +628,154 @@
     }
   }
 
-  // ── Playlist Operations ─────────────────────────────────────────────
+  // ── Offscreen Reel Interaction ────────────────────────────────────
+  // Instagram virtualizes the feed: once a queued reel scrolls out of the
+  // viewport, its DOM container is destroyed. Liking/reposting from the
+  // queue then has nothing to click. We load the reel's permalink page in
+  // a hidden same-origin iframe, wait for Instagram's React app to render
+  // its action bar, and click the real button there. Runs fully in-page —
+  // no network requests or permissions beyond the page itself.
+
+  const HIDDEN_IFRAME_STYLE = [
+    'position:fixed',
+    'right:100%',        // fully off-viewport
+    'bottom:100%',
+    'width:480px',
+    'height:853px',
+    'opacity:0',
+    'pointer-events:none',
+    'border:0',
+    'z-index:-1'
+  ].join(';');
+
+  /**
+   * Click a like/repost button on a reel loaded inside a hidden iframe.
+   * Resolves with the button's PRE-click aria-label (the state we flipped
+   * FROM — React re-renders async, so reading after the click races), or
+   * null when no button was found.
+   */
+  function clickReelButtonInFrame(frameDoc, kind) {
+    const likeSelectors = [
+      'button[aria-label="Like" i]', '[role="button"][aria-label="Like" i]',
+      'button[aria-label="Unlike" i]', '[role="button"][aria-label="Unlike" i]',
+      'svg[aria-label="Like" i]', 'svg[aria-label="Unlike" i]',
+      'button[aria-label^="Like " i]', '[role="button"][aria-label^="Like " i]',
+      'button[aria-label^="Unlike " i]', '[role="button"][aria-label^="Unlike " i]',
+    ];
+    const repostLabels = ['Repost', 'Reposted', 'Undo Repost', 'Remove Repost', 'Remove from Reposts'];
+    const repostSelectors = [
+      repostLabels.map(l => `button[aria-label="${l}" i], [role="button"][aria-label="${l}" i], svg[aria-label="${l}" i], [aria-label="${l}" i]`).join(', '),
+      'button[aria-label^="Repost" i], [role="button"][aria-label^="Repost" i], [aria-label^="Repost" i]',
+    ];
+    const selectors = kind === 'like' ? likeSelectors.join(', ') : repostSelectors.join(', ');
+    const btn = frameDoc.querySelector(selectors);
+    if (!btn) return null;
+
+    // Capture the label BEFORE clicking — React re-renders asynchronously,
+    // so reading it after click() would race and often return the stale
+    // pre-click state. The pre-click label tells us the state we flipped FROM.
+    const preLabel = (
+      btn.getAttribute('aria-label') ||
+      btn.querySelector('svg')?.getAttribute('aria-label') ||
+      ''
+    ).trim();
+
+    // Click like a user would, with pointer events first — Instagram's
+    // audio permission requires real user activation in the main page.
+    const clickable = btn.closest('button, [role="button"]') || btn;
+    const rect = clickable.getBoundingClientRect();
+    const opts = {
+      bubbles: true, cancelable: true, view: frameDoc.defaultView,
+      clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2,
+      screenX: (frameDoc.defaultView?.screenX || 0) + rect.left, screenY: (frameDoc.defaultView?.screenY || 0) + rect.top,
+    };
+    try {
+      clickable.dispatchEvent(new frameDoc.defaultView.PointerEvent('pointerdown', { ...opts, buttons: 1 }));
+      clickable.dispatchEvent(new frameDoc.defaultView.MouseEvent('mousedown', { ...opts, buttons: 1 }));
+      clickable.dispatchEvent(new frameDoc.defaultView.PointerEvent('pointerup', { ...opts, buttons: 1 }));
+      clickable.dispatchEvent(new frameDoc.defaultView.MouseEvent('mouseup', { ...opts, buttons: 1 }));
+      clickable.click();
+    } catch (_) { try { clickable.click(); } catch (_) {} }
+
+    return preLabel;
+  }
+
+  /** Auto-click the confirmation button when a remove-repost dialog opens inside the frame. */
+  function autoConfirmRemoveInFrame(frameDoc) {
+    const phrases = ['remove from repost', 'remove repost', 'delete repost', 'undo repost'];
+    const dialogSelectors = ['[role="dialog"]', 'div[aria-modal="true"]'];
+    for (const dSel of dialogSelectors) {
+      for (const dialog of frameDoc.querySelectorAll(dSel)) {
+        const btns = dialog.querySelectorAll('button, [role="button"], [role="menuitem"]');
+        for (const b of btns) {
+          const t = (b.textContent || '').trim().toLowerCase();
+          for (const p of phrases) if (t.includes(p)) return b.click();
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Perform like/repost on a reel that's not present in the live DOM, by
+   * loading its permalink in a hidden iframe and clicking the real button.
+   */
+  function interactWithReelOffscreen(permalink, kind, onDone) {
+    if (!permalink) return onDone(null);
+    let iframe = null;
+    let settled = false;
+    let pollCount = 0;
+    let pollTimer = null;
+    let confirmWatcher = null;
+
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      if (confirmWatcher) clearInterval(confirmWatcher);
+      if (pollTimer) clearTimeout(pollTimer);
+      setTimeout(() => iframe?.remove(), 6000); // keep frame alive briefly so the request isn't cancelled mid-flight
+      onDone(result);
+    };
+
+    try {
+      iframe = document.createElement('iframe');
+      iframe.src = permalink;
+      iframe.style.cssText = HIDDEN_IFRAME_STYLE;
+      iframe.setAttribute('aria-hidden', 'true');
+      iframe.setAttribute('tabindex', '-1');
+      document.body.appendChild(iframe);
+    } catch (_) {
+      return finish(null);
+    }
+
+    // Poll for the reel's action bar inside the frame. Instagram renders
+    // its React app asynchronously; the permalink page shows the single
+    // reel with its like/repost buttons.
+    const attempt = () => {
+      pollCount++;
+      let frameDoc = null;
+      try { frameDoc = iframe.contentDocument; } catch (_) { return finish(null); /* cross-origin; can't happen (same-origin) */ }
+      if (!frameDoc || !frameDoc.body) {
+        if (pollCount > 40) return finish(null); // ~8s timeout
+        pollTimer = setTimeout(attempt, 200);
+        return;
+      }
+      const postLabel = clickReelButtonInFrame(frameDoc, kind);
+      if (postLabel !== null) {
+        // If this was a repost-removal, Instagram may open a confirm dialog — settle it.
+        confirmWatcher = setInterval(() => {
+          if (autoConfirmRemoveInFrame(frameDoc)) {
+            clearInterval(confirmWatcher);
+          }
+        }, 300);
+        finish(postLabel);
+        return;
+      }
+      if (pollCount > 40) return finish(null);
+      pollTimer = setTimeout(attempt, 200);
+    };
+    attempt();
+  }
   async function addCurrentReel() {
     let resolvedData = null;
     try {
@@ -779,69 +926,75 @@
     if (S.queueIndex === -1 || !S.queue || !S.queue[S.queueIndex]) return;
     const item = S.queue[S.queueIndex];
 
+    // 1. Reel still rendered in the feed? Click Instagram's real button there.
     const container = findContainerForItem(item);
-    let clicked = false;
     if (container) {
       const btn = RR.domUtils?.findLikeButtonInScope?.(container);
-      if (btn) {
-        clicked = RR.domUtils?.triggerClick?.(btn);
-      }
-      if (!clicked) {
-        const v = container.querySelector('video') || container;
-        try {
-          const dbl = new MouseEvent('dblclick', { bubbles: true, cancelable: true, view: window });
-          v.dispatchEvent(dbl);
-          clicked = true;
-        } catch (_) {}
+      const likeState = RR.domUtils?.getReelActionState?.(container.querySelector('video') || container, 'like') || '';
+      const wasLiked = likeState.includes('unlike') || likeState.includes('liked');
+      if (btn && RR.domUtils?.triggerClick?.(btn)) {
+        item.liked = !wasLiked;
+        updateNowPlayingUI();
+        renderPlaylist();
+        showToast(item.liked ? 'Liked ❤️ (Q)' : 'Unliked 🤍 (Q)');
+        return;
       }
     }
 
-    try {
-      window.dispatchEvent(new CustomEvent('RR_QUEUE_ACTION_REQ', {
-        detail: {
-          action: 'like',
-          permalink: item.permalink,
-          src: item.src,
-        }
-      }));
-    } catch (_) {}
-
-    item.liked = !item.liked;
-    updateNowPlayingUI();
-    renderPlaylist();
-    showToast(item.liked ? 'Queue Reel Liked ❤️ (Q)' : 'Queue Reel Unliked 🤍 (Q)');
+    // 2. Reel is offscreen (virtualized away): interact via hidden iframe.
+    showToast('Liking reel…');
+    interactWithReelOffscreen(item.permalink, 'like', (preLabel) => {
+      if (preLabel === null) {
+        showToast('Could not like — reel unavailable');
+        return;
+      }
+      // preLabel is the button's label BEFORE the click: an "Unlike"
+      // button means it WAS liked, so this click unlikes it.
+      const wasLiked = preLabel.toLowerCase().includes('unlike');
+      item.liked = !wasLiked;
+      updateNowPlayingUI();
+      renderPlaylist();
+      showToast(item.liked ? 'Liked ❤️ (Q)' : 'Unliked 🤍 (Q)');
+    });
   }
 
   function repostActiveQueueItem() {
     if (S.queueIndex === -1 || !S.queue || !S.queue[S.queueIndex]) return;
     const item = S.queue[S.queueIndex];
 
+    // 1. Reel still rendered in the feed? Click Instagram's real button there.
     const container = findContainerForItem(item);
-    let clicked = false;
     if (container) {
       const btn = RR.domUtils?.findRepostButtonInScope?.(container);
-      if (btn) {
-        clicked = RR.domUtils?.triggerClick?.(btn);
-        if (clicked) {
-          RR.domUtils?.autoConfirmRepostRemoval?.();
-        }
+      const repostState = RR.domUtils?.getReelActionState?.(container.querySelector('video') || container, 'repost') || '';
+      const wasReposted = repostState.includes('reposted') || repostState.includes('undo') || repostState.includes('remove');
+      if (btn && RR.domUtils?.triggerClick?.(btn)) {
+        RR.domUtils?.autoConfirmRepostRemoval?.();
+        item.reposted = !wasReposted;
+        updateNowPlayingUI();
+        renderPlaylist();
+        showToast(item.reposted ? 'Reposted 🔄 (V)' : 'Repost removed ↩️ (V)');
+        return;
       }
     }
 
-    try {
-      window.dispatchEvent(new CustomEvent('RR_QUEUE_ACTION_REQ', {
-        detail: {
-          action: 'repost',
-          permalink: item.permalink,
-          src: item.src,
-        }
-      }));
-    } catch (_) {}
-
-    item.reposted = !item.reposted;
-    updateNowPlayingUI();
-    renderPlaylist();
-    showToast(item.reposted ? 'Queue Reel Reposted 🔄 (V)' : 'Queue Repost Removed ↩️ (V)');
+    // 2. Reel is offscreen (virtualized away): interact via hidden iframe.
+    showToast('Reposting reel…');
+    interactWithReelOffscreen(item.permalink, 'repost', (preLabel) => {
+      if (preLabel === null) {
+        showToast('Could not repost — reel unavailable');
+        return;
+      }
+      // preLabel is the button's label BEFORE the click: a plain "Repost"
+      // button means it was NOT reposted, so this click adds a repost;
+      // "Reposted"/"Undo"/"Remove Repost" means it was.
+      const wasReposted = !preLabel.toLowerCase().trim().startsWith('repost') ||
+                          /reposted|undo|remove/i.test(preLabel);
+      item.reposted = !wasReposted;
+      updateNowPlayingUI();
+      renderPlaylist();
+      showToast(item.reposted ? 'Reposted 🔄 (V)' : 'Repost removed ↩️ (V)');
+    });
   }
 
   function removeIndex(index) {
@@ -1385,6 +1538,13 @@
               <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"></path>
             </svg>
           </button>
+          <button type="button" id="reel-queue-download-btn" class="rq-ctrl-btn" title="Save video (Shift+D)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+          </button>
           <div id="reel-queue-progress-bar">
             <div id="reel-queue-progress-fill"></div>
           </div>
@@ -1478,6 +1638,10 @@
     panelEl.querySelector('#reel-queue-focus-btn')?.addEventListener('click', (e) => {
       e.stopPropagation();
       RR.focus?.toggle?.(videoEl);
+    });
+    panelEl.querySelector('#reel-queue-download-btn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      RR.actions?.downloadActiveVideo?.();
     });
 
     // Player events
@@ -1621,6 +1785,8 @@
     applyQueueVideoRotation,
     likeActiveQueueItem,
     repostActiveQueueItem,
+    resolveVideoUrl: resolvePlayableVideoUrl,
+    requestMainWorldVideoData,
     isQueuePlaying,
     getVideoEl: () => videoEl,
     isOpen: () => !!S.queueVisible,

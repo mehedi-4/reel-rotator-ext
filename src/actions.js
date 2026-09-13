@@ -203,6 +203,124 @@
     RR.ui?.showStatusToast?.(`${rate}× speed`);
   }
 
+  /**
+   * Build a sane filename for a downloaded reel.
+   */
+  function buildDownloadFilename(author) {
+    const safeAuthor = String(author || '')
+      .replace(/[^\w.-]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 40);
+    return `instagram-reel-${safeAuthor || 'video'}-${Date.now()}.mp4`;
+  }
+
+  /**
+   * Open `url` in a new tab as a manual-save fallback. After an await the
+   * user activation is spent, so window.open may be popup-blocked — fall
+   * back to a synthesized anchor click, which isn't gated the same way.
+   */
+  function openVideoInTab(url) {
+    try {
+      const win = window.open(url, '_blank');
+      if (win) return;
+    } catch (_) {}
+    try {
+      const a = document.createElement('a');
+      a.href = url;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (_) {}
+  }
+
+  /**
+   * Ask the background service worker to download `url` via
+   * chrome.downloads — immune to the page's CORS restrictions (this is
+   * the same mechanism Chrome's own "Download video" context-menu item
+   * uses). Resolves true on success.
+   */
+  function downloadViaBackground(url, filename) {
+    return new Promise((resolve) => {
+      try {
+        chrome.runtime.sendMessage(
+          { type: 'RR_DOWNLOAD', url, filename },
+          (res) => {
+            if (chrome.runtime.lastError) return resolve(false);
+            resolve(!!res?.ok);
+          }
+        );
+      } catch (_) { resolve(false); }
+    });
+  }
+
+  /**
+   * Download the active video (Shift+D). Targets whichever reel is
+   * "enabled": the queue's video when the queue is playing/hovered or
+   * focused, otherwise the focused/rotated/active feed reel.
+   *
+   * Queue items carry a direct CDN mp4 URL. Feed reels stream via MSE
+   * (blob: src) — the direct URL must be resolved by the MAIN-world
+   * bridge (fiber traversal is invisible from the content script's
+   * isolated world), then the download itself runs in the background
+   * worker via chrome.downloads.
+   */
+  async function downloadActiveVideo() {
+    const queueVideo = RR.queue?.getVideoEl?.();
+    const isQueueTarget = (queueVideo && queueVideo === (S.focusMode ? S.focusedVideo : null)) ||
+                          RR.queue?.isQueuePlaying?.() ||
+                          RR.queue?.isHovered?.();
+
+    // ── Queue path: item src is a direct URL ──────────────────────────
+    if (isQueueTarget && queueVideo && queueVideo.src &&
+        S.queueIndex !== -1 && S.queue?.[S.queueIndex]) {
+      const item = S.queue[S.queueIndex];
+      const ok = await downloadViaBackground(item.src, buildDownloadFilename(item.author));
+      RR.ui?.showStatusToast?.(ok ? 'Downloading ⬇' : 'Download failed — opening video in a tab');
+      if (!ok) openVideoInTab(item.src);
+      return ok;
+    }
+
+    // ── Feed / focus path ────────────────────────────────────────────
+    const video = getTargetVideo();
+    if (!video) {
+      RR.ui?.showStatusToast?.('No active video to download');
+      return false;
+    }
+
+    RR.ui?.showStatusToast?.('Fetching video URL…');
+
+    // Resolve the direct CDN URL. Feed reels expose only a blob: MSE src,
+    // and the fiber traversal that finds the mp4 URL must run in the page
+    // (MAIN world) — hence the bridge round-trip.
+    let url = video.currentSrc || video.src || '';
+    if (!url || url.startsWith('blob:')) {
+      try {
+        const resolved = await RR.queue?.requestMainWorldVideoData?.(600);
+        if (resolved?.url) url = resolved.url;
+      } catch (_) {}
+    }
+
+    if (!url || url.startsWith('blob:')) {
+      RR.ui?.showStatusToast?.('Video URL not resolvable — scroll to the reel and retry');
+      return false;
+    }
+
+    // Best-effort author for the filename.
+    let author = '';
+    try {
+      const container = RR.domUtils?.findReelContainer?.(video);
+      const authorEl = container?.querySelector?.('header a, a[role="link"] span');
+      if (authorEl?.textContent) author = authorEl.textContent.trim();
+    } catch (_) {}
+
+    const ok = await downloadViaBackground(url, buildDownloadFilename(author));
+    RR.ui?.showStatusToast?.(ok ? 'Downloading ⬇' : 'Download failed — opening video in a tab');
+    if (!ok) openVideoInTab(url);
+    return ok;
+  }
+
   // ── Expose ──────────────────────────────────────────────────────────
   RR.actions = {
     reactLike,
@@ -210,5 +328,6 @@
     toggleMute,
     adjustVolume,
     setPlaybackRate,
+    downloadActiveVideo,
   };
 })();

@@ -212,6 +212,14 @@
       return true;
     }
 
+    // ── Shift+D: download the enabled video (queue or feed), any mode ─
+    if (e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey && e.code === 'KeyD') {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      RR.actions?.downloadActiveVideo?.();
+      return true;
+    }
+
     // ── Shift+1..4: playback speed 1x / 1.25x / 1.5x / 2x ───────────
     // Match on e.code (physical key) so the shortcut works on any layout:
     // US Shift+1 produces '!', AZERTY produces '1', etc. — the code stays
