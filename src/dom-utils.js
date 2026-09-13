@@ -376,6 +376,88 @@
   }
 
   /**
+   * Find the save/bookmark button inside a specific DOM subtree.
+   * Instagram's aria-labels: "Save", "Saved" (already saved), "Unsave" /
+   * "Remove from saved" (hover state on a saved post).
+   */
+  function findSaveButtonInScope(scope) {
+    if (!scope) return null;
+
+    const exactLabels = ['Save', 'Saved', 'Unsave', 'Remove from Saved', 'Remove'];
+    for (const label of exactLabels) {
+      const btn = scope.querySelector(
+        `button[aria-label="${label}" i]:not(#reel-rotate-btn):not([id^="reel-"]), ` +
+        `[role="button"][aria-label="${label}" i]:not(#reel-rotate-btn):not([id^="reel-"]), ` +
+        `svg[aria-label="${label}" i], ` +
+        `[aria-label="${label}" i]:not(#reel-rotate-btn):not([id^="reel-"])`
+      );
+      if (btn) return btn;
+    }
+
+    return scope.querySelector(
+      `button[aria-label^="Save" i]:not(#reel-rotate-btn):not([id^="reel-"]), ` +
+      `[role="button"][aria-label^="Save" i]:not(#reel-rotate-btn):not([id^="reel-"]), ` +
+      `svg[aria-label^="Save" i], ` +
+      `[aria-label^="Save" i]:not(#reel-rotate-btn):not([id^="reel-"])`
+    );
+  }
+
+  /**
+   * Find the save/bookmark button for a given video.
+   * Resolved-reel-container first, then spatial: like/repost buttons live
+   * in the same right-hand action column, so the save button is the
+   * right-aligned button vertically closest to the video's center.
+   */
+  function findSaveButtonForVideo(video) {
+    if (!video) return null;
+
+    // 1. Check inside the resolved reel container
+    const container = findReelContainer(video);
+    if (container) {
+      const btn = findSaveButtonInScope(container);
+      if (btn) return btn;
+    }
+
+    // 2. Spatial match: save buttons sit in the same action column as
+    // like/comment/share — find the candidates vertically aligned with
+    // the video and pick the closest one that isn't a like/comment/share/
+    // repost/audio control (those have their own finders).
+    const vRect = video.getBoundingClientRect();
+    const saveSelectors = [
+      'button[aria-label="Save" i]',
+      '[role="button"][aria-label="Save" i]',
+      'button[aria-label="Saved" i]',
+      '[role="button"][aria-label="Saved" i]',
+      'button[aria-label="Unsave" i]',
+      '[role="button"][aria-label="Unsave" i]',
+      'button[aria-label^="Save" i]',
+      '[role="button"][aria-label^="Save" i]',
+      'svg[aria-label^="Save" i]',
+      '[aria-label^="Save" i]'
+    ].join(', ');
+
+    const allCandidates = document.querySelectorAll(saveSelectors);
+    let bestBtn = null;
+    let bestDist = Infinity;
+
+    for (const el of allCandidates) {
+      if (el.id === 'reel-rotate-btn' || el.id?.startsWith('reel-')) continue;
+      const clickable = el.closest('button, [role="button"]') || el;
+      const r = clickable.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) continue;
+      if (r.bottom < vRect.top - 50 || r.top > vRect.bottom + 50) continue;
+
+      const dist = Math.abs(r.top + r.height / 2 - (vRect.top + vRect.height / 2));
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestBtn = clickable;
+      }
+    }
+
+    return bestBtn;
+  }
+
+  /**
    * Find the repost button inside a specific DOM subtree.
    */
   function findRepostButtonInScope(scope) {
@@ -857,7 +939,14 @@
       f => f.toLowerCase().includes('repost')
     );
 
-    const btn = isRepost ? findRepostButtonForVideo(video) : findLikeButtonForVideo(video);
+    const isSave = (labelFragments || []).some(f => {
+      const lf = f.toLowerCase();
+      return lf.includes('save') || lf.includes('unsave');
+    });
+
+    const btn = isRepost
+      ? findRepostButtonForVideo(video)
+      : (isSave ? findSaveButtonForVideo(video) : findLikeButtonForVideo(video));
     if (btn) {
       return triggerClick(btn);
     }
@@ -869,7 +958,7 @@
     if (!video) return null;
     const btn = action === 'repost'
       ? findRepostButtonForVideo(video)
-      : findLikeButtonForVideo(video);
+      : (action === 'save' ? findSaveButtonForVideo(video) : findLikeButtonForVideo(video));
     if (!btn) return null;
 
     return (
@@ -895,6 +984,8 @@
     findScrollContainer,
     findReelContainer,
     findAudioButtonForVideo,
+    findSaveButtonInScope,
+    findSaveButtonForVideo,
     isAudioButtonMuted,
     triggerClick,
     clickReelButton,

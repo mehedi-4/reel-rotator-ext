@@ -14,6 +14,7 @@
     nextReel:    's',
     react:       'q',
     repost:      'v',
+    save:        'x',
     addToQueue:  'd',
     toggleAudio: 't',
     toggleQueue: 'g',
@@ -37,6 +38,9 @@
       }
       if (!stored.toggleQueue) {
         stored.toggleQueue = DEFAULTS.toggleQueue;
+      }
+      if (!stored.save) {
+        stored.save = DEFAULTS.save;
       }
       try { chrome.storage.local.set({ keymap: stored }); } catch (_) {}
       const km = { ...DEFAULTS, ...stored };

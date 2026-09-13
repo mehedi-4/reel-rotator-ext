@@ -48,6 +48,7 @@ Click the **Reel Rotator** icon in your toolbar to customize. Defaults:
 | `S` | Next reel (down) |
 | `Q` | React (like / unlike) the active reel |
 | `V` | Repost the active reel |
+| `X` | Save the active reel to your Instagram Saved posts |
 | `D` | Add active reel to Queue (plays in right dock) |
 | `T` | Toggle audio focus (Queue vs Main Feed) |
 | `G` | Hide / unhide Queue section |

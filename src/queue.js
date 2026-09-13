@@ -667,7 +667,21 @@
       repostLabels.map(l => `button[aria-label="${l}" i], [role="button"][aria-label="${l}" i], svg[aria-label="${l}" i], [aria-label="${l}" i]`).join(', '),
       'button[aria-label^="Repost" i], [role="button"][aria-label^="Repost" i], [aria-label^="Repost" i]',
     ];
-    const selectors = kind === 'like' ? likeSelectors.join(', ') : repostSelectors.join(', ');
+    const saveSelectors = [
+      'button[aria-label="Save" i]', '[role="button"][aria-label="Save" i]',
+      'button[aria-label="Saved" i]', '[role="button"][aria-label="Saved" i]',
+      'button[aria-label="Unsave" i]', '[role="button"][aria-label="Unsave" i]',
+      'svg[aria-label="Save" i]', 'svg[aria-label="Saved" i]', 'svg[aria-label="Unsave" i]',
+      'button[aria-label^="Save" i]', '[role="button"][aria-label^="Save" i]', '[aria-label^="Save" i]',
+    ];
+    let selectors;
+    if (kind === 'like') {
+      selectors = likeSelectors.join(', ');
+    } else if (kind === 'save') {
+      selectors = saveSelectors.join(', ');
+    } else {
+      selectors = repostSelectors.join(', ');
+    }
     const btn = frameDoc.querySelector(selectors);
     if (!btn) return null;
 
@@ -997,6 +1011,48 @@
     });
   }
 
+  /**
+   * Toggle save/bookmark (X) on the active queue reel. Same two-tier
+   * strategy as like/repost: real button if the reel is still in the
+   * live DOM, hidden-iframe click when Instagram has virtualized it away.
+   */
+  function saveActiveQueueItem() {
+    if (S.queueIndex === -1 || !S.queue || !S.queue[S.queueIndex]) return;
+    const item = S.queue[S.queueIndex];
+
+    // 1. Reel still rendered in the feed? Click Instagram's real button there.
+    const container = findContainerForItem(item);
+    if (container) {
+      const btn = RR.domUtils?.findSaveButtonInScope?.(container);
+      const saveState = RR.domUtils?.getReelActionState?.(container.querySelector('video') || container, 'save') || '';
+      const wasSaved = saveState.includes('saved') || saveState.includes('unsave') || saveState.includes('remove');
+      if (btn && RR.domUtils?.triggerClick?.(btn)) {
+        item.saved = !wasSaved;
+        updateNowPlayingUI();
+        renderPlaylist();
+        showToast(item.saved ? 'Saved 🔖 (X)' : 'Removed from Saved (X)');
+        return;
+      }
+    }
+
+    // 2. Reel is offscreen (virtualized away): interact via hidden iframe.
+    showToast('Saving reel…');
+    interactWithReelOffscreen(item.permalink, 'save', (preLabel) => {
+      if (preLabel === null) {
+        showToast('Could not save — reel unavailable');
+        return;
+      }
+      // preLabel is the button's label BEFORE the click: "Save" means it
+      // was NOT saved (this click saves); "Saved"/"Unsave"/"Remove…"
+      // means it was (this click unsaves).
+      const wasSaved = preLabel.toLowerCase() !== 'save';
+      item.saved = !wasSaved;
+      updateNowPlayingUI();
+      renderPlaylist();
+      showToast(item.saved ? 'Saved 🔖 (X)' : 'Removed from Saved (X)');
+    });
+  }
+
   function removeIndex(index) {
     if (index < 0 || index >= S.queue.length) return;
 
@@ -1167,6 +1223,16 @@
       }
     }
 
+    const saveBtn = panelEl?.querySelector('#reel-queue-save-btn');
+    if (saveBtn) {
+      const isSaved = !!activeItem?.saved;
+      saveBtn.classList.toggle('active-save', isSaved);
+      const svg = saveBtn.querySelector('svg');
+      if (svg) {
+        svg.setAttribute('fill', isSaved ? '#fff' : 'none');
+      }
+    }
+
     const focusBtn = panelEl?.querySelector('#reel-queue-focus-btn');
     if (focusBtn) {
       const isFocused = S.focusMode && S.focusedVideo === videoEl;
@@ -1245,6 +1311,7 @@
 
       const likedBadge = item.liked ? `<span title="Liked" style="margin-left:4px;font-size:10px;">❤️</span>` : '';
       const repostedBadge = item.reposted ? `<span title="Reposted" style="margin-left:4px;font-size:10px;">🔄</span>` : '';
+      const savedBadge = item.saved ? `<span title="Saved" style="margin-left:4px;font-size:10px;">🔖</span>` : '';
 
       card.innerHTML = `
         <div class="rq-drag-handle" title="Drag to reorder">
@@ -1258,7 +1325,7 @@
           ${thumbHtml}
         </div>
         <div class="rq-meta">
-          <div class="rq-author">@${item.author} ${rotBadge}${likedBadge}${repostedBadge}</div>
+          <div class="rq-author">@${item.author} ${rotBadge}${likedBadge}${repostedBadge}${savedBadge}</div>
           <div class="rq-caption">${item.caption || 'Reel video'}</div>
           ${statusBadge}
         </div>
@@ -1532,6 +1599,11 @@
               <path d="M21 13v1a4 4 0 0 1-4 4H3"></path>
             </svg>
           </button>
+          <button type="button" id="reel-queue-save-btn" class="rq-ctrl-btn" title="Save reel (X)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+            </svg>
+          </button>
           <button type="button" id="reel-queue-focus-btn" class="rq-ctrl-btn" title="Focus mode (F)">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="2" y="2" width="20" height="20" rx="3"></rect>
@@ -1634,6 +1706,10 @@
     panelEl.querySelector('#reel-queue-repost-btn')?.addEventListener('click', (e) => {
       e.stopPropagation();
       repostActiveQueueItem();
+    });
+    panelEl.querySelector('#reel-queue-save-btn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      saveActiveQueueItem();
     });
     panelEl.querySelector('#reel-queue-focus-btn')?.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -1785,6 +1861,7 @@
     applyQueueVideoRotation,
     likeActiveQueueItem,
     repostActiveQueueItem,
+    saveActiveQueueItem,
     resolveVideoUrl: resolvePlayableVideoUrl,
     requestMainWorldVideoData,
     isQueuePlaying,

@@ -23,6 +23,7 @@
     nextReel:    's',
     react:       'q',
     repost:      'v',
+    save:        'x',
     addToQueue:  'd',
     toggleAudio: 't',
     toggleQueue: 'g',
@@ -109,6 +110,13 @@
         RR.actions.repost();
       }
     },
+    save:        () => {
+      if (isQueueActive()) {
+        RR.queue?.saveActiveQueueItem?.();
+      } else {
+        RR.actions.save();
+      }
+    },
     addToQueue:  () => RR.queue?.addCurrentReel?.(),
     toggleAudio: () => RR.queue?.toggleAudioFocus?.(),
     toggleQueue: () => RR.queue?.togglePanel?.(),
@@ -131,6 +139,11 @@
         }
         if (!stored.toggleQueue) {
           stored.toggleQueue = DEFAULT_KEYMAP.toggleQueue;
+        }
+        // Backfill: `save` shipped later — existing stored keymaps lack it,
+        // and without this X would silently do nothing for them.
+        if (!stored.save) {
+          stored.save = DEFAULT_KEYMAP.save;
         }
         try { chrome.storage.local.set({ keymap: stored }); } catch (_) {}
         keymap = { ...DEFAULT_KEYMAP, ...stored };

@@ -321,6 +321,26 @@
     return ok;
   }
 
+  /**
+   * Toggle save/bookmark on the active reel (default X). Instagram's own
+   * bookmark button toggles Save ↔ Saved, so the post lands in the user's
+   * Saved collection (instagram.com → profile → Saved) with no extra
+   * collection picker — exactly like tapping the bookmark in the app.
+   */
+  function save() {
+    const video = getTargetVideo();
+    const saveState = RR.domUtils?.getReelActionState?.(video, 'save') || '';
+    const wasSaved = saveState.includes('saved') || saveState.includes('unsave') ||
+                     saveState.includes('remove');
+
+    const clicked = clickReelButton(video, ['Save', 'Saved', 'Unsave', 'Remove from Saved']);
+
+    if (S.focusMode) {
+      RR.ui?.showFocusStatus?.(wasSaved ? 'Removed from Saved' : 'Saved');
+    }
+    return { clicked, wasSaved };
+  }
+
   // ── Expose ──────────────────────────────────────────────────────────
   RR.actions = {
     reactLike,
@@ -329,5 +349,6 @@
     adjustVolume,
     setPlaybackRate,
     downloadActiveVideo,
+    save,
   };
 })();

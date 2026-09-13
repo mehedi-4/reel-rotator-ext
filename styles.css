@@ -372,6 +372,10 @@
   color: #00f685;
 }
 
+.rq-ctrl-btn.active-save {
+  color: #fff;
+}
+
 .rq-ctrl-btn.active-focus {
   color: #eab308;
 }
