@@ -17,6 +17,7 @@
     <a class="nav-link active" href="#overview">Overview</a>
     <a class="nav-link" href="#patterns">Watching patterns</a>
     <a class="nav-link" href="#history">Daily history</a>
+    <a class="nav-link help-link" href="#help">Help & shortcuts</a>
     <div class="local-note"><span class="status-dot"></span>Stored on this computer<p>Your history stays local.</p></div>
   </aside>
 
@@ -65,6 +66,69 @@
       <div class="panel-heading"><div><h2 id="history-title">Daily history</h2><p>Every day in the selected period, including quiet ones</p></div><span id="history-count" class="muted"></span></div>
       <div class="table-wrap"><table><thead><tr><th scope="col">Date</th><th scope="col">Reels scrolled</th><th scope="col">Time watching</th><th scope="col">Sessions</th><th scope="col">Current daily limit</th></tr></thead><tbody id="history-body"></tbody></table></div>
       <div class="pagination"><span id="page-caption"></span><div><button type="button" id="previous-page">Previous</button><button type="button" id="next-page">Next</button></div></div>
+    </section>
+
+    <section class="help-section" id="help" aria-labelledby="help-title">
+      <div class="help-heading"><p class="eyebrow">YOUR CONTROLS</p><h2 id="help-title">Help & shortcuts</h2><p>Every control available while watching Instagram Reels.</p></div>
+      <div class="help-grid">
+        <article class="panel help-card" aria-labelledby="reel-controls-title">
+          <div class="panel-heading"><div><h3 id="reel-controls-title">Reel controls</h3><p id="shortcut-note">Default keys shown. Check extension settings for your custom keys.</p></div></div>
+          <table class="shortcut-table" aria-labelledby="reel-controls-title">
+            <thead><tr><th scope="col">Key</th><th scope="col">Action</th></tr></thead>
+            <tbody>
+              <tr><td><kbd id="shortcut-rotate">R</kbd></td><td>Rotate 90° counter-clockwise</td></tr>
+              <tr><td><kbd id="shortcut-rotateCW">E</kbd></td><td>Rotate 90° clockwise</td></tr>
+              <tr><td><kbd id="shortcut-focus">F</kbd></td><td>Enter or exit focus mode</td></tr>
+              <tr><td><kbd id="shortcut-prevReel">W</kbd></td><td>Previous reel</td></tr>
+              <tr><td><kbd id="shortcut-nextReel">S</kbd></td><td>Next reel</td></tr>
+              <tr><td><kbd id="shortcut-react">Q</kbd></td><td>Like or unlike the active reel</td></tr>
+              <tr><td><kbd id="shortcut-repost">V</kbd></td><td>Repost or undo a repost</td></tr>
+              <tr><td><kbd id="shortcut-save">X</kbd></td><td>Save or unsave a bookmark on Instagram</td></tr>
+            </tbody>
+          </table>
+        </article>
+        <article class="panel help-card" aria-labelledby="media-controls-title">
+          <div class="panel-heading"><div><h3 id="media-controls-title">Media controls</h3><p>Fixed keys · work in the feed and focus mode</p></div></div>
+          <table class="shortcut-table" aria-labelledby="media-controls-title">
+            <thead><tr><th scope="col">Key</th><th scope="col">Action</th></tr></thead>
+            <tbody>
+              <tr><td><kbd>Space</kbd></td><td>Play or pause the active video</td></tr>
+              <tr><td><kbd>M</kbd></td><td>Mute or unmute</td></tr>
+              <tr><td><kbd>Shift + D</kbd></td><td>Download the active reel as an MP4</td></tr>
+              <tr><td><kbd>Shift + W</kbd></td><td>Volume up by 10% · unmutes if muted</td></tr>
+              <tr><td><kbd>Shift + S</kbd></td><td>Volume down by 10% · minimum 5%</td></tr>
+              <tr><td><kbd>Shift + 1</kbd></td><td>Playback speed: 1×</td></tr>
+              <tr><td><kbd>Shift + 2</kbd></td><td>Playback speed: 1.25×</td></tr>
+              <tr><td><kbd>Shift + 3</kbd></td><td>Playback speed: 1.5×</td></tr>
+              <tr><td><kbd>Shift + 4</kbd></td><td>Playback speed: 2×</td></tr>
+            </tbody>
+          </table>
+        </article>
+        <article class="panel help-card" aria-labelledby="focus-controls-title">
+          <div class="panel-heading"><div><h3 id="focus-controls-title">Focus navigation</h3><p>Fixed keys · while focus mode is active</p></div></div>
+          <table class="shortcut-table" aria-labelledby="focus-controls-title">
+            <thead><tr><th scope="col">Key</th><th scope="col">Action</th></tr></thead>
+            <tbody>
+              <tr><td><kbd>↑</kbd> <span class="muted">Up arrow</span></td><td>Previous reel</td></tr>
+              <tr><td><kbd>↓</kbd> <span class="muted">Down arrow</span></td><td>Next reel</td></tr>
+              <tr><td><kbd>Esc</kbd></td><td>Exit focus mode</td></tr>
+            </tbody>
+          </table>
+        </article>
+        <article class="panel help-card" aria-labelledby="mouse-controls-title">
+          <div class="panel-heading"><div><h3 id="mouse-controls-title">Mouse & trackpad</h3><p>Quick controls without the keyboard</p></div></div>
+          <table class="shortcut-table" aria-labelledby="mouse-controls-title">
+            <thead><tr><th scope="col">Control</th><th scope="col">Action</th></tr></thead>
+            <tbody>
+              <tr><td>Click the ↻ button</td><td>Rotate 90° counter-clockwise</td></tr>
+              <tr><td>Scroll or swipe up / down</td><td>Previous or next reel in focus mode</td></tr>
+              <tr><td>Scroll in the normal feed</td><td>Navigate reels and reset rotation</td></tr>
+              <tr><td>Click the dark backdrop</td><td>Exit focus mode</td></tr>
+            </tbody>
+          </table>
+        </article>
+      </div>
+      <p class="help-tip">Use shortcuts while you’re not typing in a text field. Volume and playback speed carry over to the next reel.</p>
     </section>
 
     <footer class="page-footer"><p>Today’s count resets at local midnight. Previous days remain in your history.</p><p>The first reel starts at zero; each settled change counts once.</p></footer>

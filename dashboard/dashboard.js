@@ -7,6 +7,7 @@
   const Model = globalThis.RRStats;
   const File = globalThis.RRStatsFile;
   const extension = !!globalThis.chrome?.runtime?.id;
+  const shortcutDefaults = { rotate: 'r', rotateCW: 'e', focus: 'f', prevReel: 'w', nextReel: 's', react: 'q', repost: 'v', save: 'x' };
   const pickerOptions = { types: [{ description: 'Reel history JSON', accept: { 'application/json': ['.json'] } }] };
   let fileHandle = null;
   let fileSnapshot = null;
@@ -17,6 +18,22 @@
   let page = 0;
   let requestNumber = 0;
   const PAGE_SIZE = 15;
+
+  function renderShortcuts(stored) {
+    const keys = { ...shortcutDefaults };
+    for (const action of Object.keys(keys)) {
+      if (typeof stored?.[action] === 'string') keys[action] = stored[action].toLowerCase();
+    }
+    // Match the migrations used by the keyboard dispatcher and settings.
+    if (keys.nextReel === 'a') keys.nextReel = shortcutDefaults.nextReel;
+    if (!keys.save) keys.save = shortcutDefaults.save;
+    for (const [action, key] of Object.entries(keys)) {
+      $(`shortcut-${action}`).textContent = key ? key.toUpperCase() : 'Unassigned';
+    }
+    $('shortcut-note').textContent = extension
+      ? 'Your current keys · customize these in extension settings'
+      : 'Default keys shown. Check extension settings for your custom keys.';
+  }
 
   async function message(type, extra = {}) {
     const response = await chrome.runtime.sendMessage({ type, ...extra });
@@ -181,9 +198,11 @@
     try {
       await ready;
       let source;
+      let shortcuts;
       let fileError = null;
       if (extension) {
-        const stored = await chrome.storage.local.get({ reelStats: Model.emptyStats(), reelCounter: { limit: 50 } });
+        const stored = await chrome.storage.local.get({ reelStats: Model.emptyStats(), reelCounter: { limit: 50 }, keymap: shortcutDefaults });
+        shortcuts = stored.keymap;
         source = { stats: stored.reelStats, dailyLimit: File.dailyLimit(stored.reelCounter?.limit) };
         if (fileHandle) {
           try {
@@ -197,6 +216,7 @@
         source = fileHandle ? await File.read(fileHandle) : fileSnapshot || { stats: Model.emptyStats(), dailyLimit: 50 };
       }
       if (request !== requestNumber) return;
+      renderShortcuts(shortcuts);
       currentStats = source.stats;
       currentLimit = source.dailyLimit;
       data = { ...Model.summary(currentStats, selectedRange), dailyLimit: currentLimit };
@@ -303,7 +323,7 @@
   });
   setInterval(() => { if (!document.hidden) refresh(); }, 15000);
   if (extension) chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === 'local' && (changes.reelStats || changes.reelCounter)) refresh();
+    if (area === 'local' && (changes.reelStats || changes.reelCounter || changes.keymap)) refresh();
   });
   const ready = (async () => {
     if (extension) {

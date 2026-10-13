@@ -85,6 +85,21 @@ td:first-child { color: var(--text); }
 .notice { border: 1px solid #375244; background: #1a2720; border-radius: 6px; padding: 13px 17px; font-size: 12px; color: #b5d9c5; margin-bottom: 20px; }
 .notice strong { color: #e1f1e8; margin-right: 6px; }
 .notice.error { border-color: #644747; background: #2c2020; color: #eeb8b8; }
+.help-section { margin-top: 40px; scroll-margin-top: 24px; }
+.help-heading { margin-bottom: 20px; }
+.help-heading h2 { font-size: 22px; }
+.help-heading > p:last-child { color: var(--muted); margin: 7px 0 0; font-size: 12px; }
+.help-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; align-items: start; }
+.help-card .panel-heading { padding-bottom: 20px; }
+.help-card h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.shortcut-table { white-space: normal; }
+.shortcut-table th, .shortcut-table td { text-align: left; padding: 12px 20px; }
+.shortcut-table td { vertical-align: top; }
+.shortcut-table td:first-child { width: 38%; }
+kbd { display: inline-block; padding: 3px 8px; border: 1px solid #414a52; border-bottom-width: 2px; border-radius: 5px; background: #22282d; color: var(--text); font-family: inherit; font-size: 11px; font-weight: 600; line-height: 1.5; white-space: nowrap; }
+.help-tip { margin: 18px 0 0; color: var(--muted); font-size: 11px; }
+@media (max-width: 1120px) { .help-grid { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .sidebar { flex-wrap: wrap; gap: 8px; } .sidebar .help-link { display: block; margin-left: auto; } .local-note { flex-basis: 100%; } .help-grid { gap: 16px; } .shortcut-table th, .shortcut-table td { padding-inline: 18px; } }
 .page-footer { color: #737d85; font-size: 10px; padding-top: 23px; }
 .page-footer p { margin: 3px 0; }
 @media (min-width: 1700px) { main { margin-right: auto; } }

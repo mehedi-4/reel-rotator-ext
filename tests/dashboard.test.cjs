@@ -39,7 +39,7 @@ function history() {
   return Model.mergeStats(Model.emptyStats(), sessions);
 }
 
-function dashboard(stats = history(), { standalone = false, handle = null } = {}) {
+function dashboard(stats = history(), { standalone = false, handle = null, keymap = {} } = {}) {
   const html = fs.readFileSync(path.join(__dirname, '../dashboard/index.html'), 'utf8');
   const elements = Object.fromEntries([...html.matchAll(/id="([^"]+)"/g)].map(([, id]) => [id, new Element()]));
   const ranges = ['7', '30', 'all'].map(range => {
@@ -71,7 +71,7 @@ function dashboard(stats = history(), { standalone = false, handle = null } = {}
     storage: {
       local: { get: async () => {
         if (!available) throw new Error('Storage unavailable.');
-        return { reelStats: stats, reelCounter: { limit: 50 } };
+        return { reelStats: stats, reelCounter: { limit: 50 }, keymap };
       } },
       onChanged: { addListener: handler => storageListeners.push(handler) },
     },
@@ -84,9 +84,50 @@ function dashboard(stats = history(), { standalone = false, handle = null } = {}
   context.RRStatsFile.setHandle = async handle => { linked = handle; };
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../dashboard/dashboard.js'), 'utf8'), context);
   return { elements, ranges, limitLegend, window, offline: () => { available = false; },
+    updateKeys: (next, area = 'local') => { keymap = next; storageListeners.forEach(handler => handler({ keymap: { newValue: next } }, area)); },
     update: next => { stats = next; storageListeners.forEach(handler => handler({ reelStats: { newValue: next } }, 'local')); } };
 }
 const settle = () => new Promise(resolve => setImmediate(resolve));
+
+test('help shows current feed bindings, ignores queue bindings, and follows settings changes live', async () => {
+  const env = dashboard(undefined, { keymap: { rotate: 'Z', nextReel: 'a', save: '', toggleQueue: 'g' } });
+  await settle();
+  assert.equal(env.elements['shortcut-rotate'].textContent, 'Z');
+  assert.equal(env.elements['shortcut-nextReel'].textContent, 'S');
+  assert.equal(env.elements['shortcut-save'].textContent, 'X');
+  assert.equal(env.elements['shortcut-toggleQueue'], undefined);
+  assert.match(env.elements['shortcut-note'].textContent, /Your current keys/);
+  env.updateKeys({ rotate: 'b', focus: 'j' }, 'sync');
+  await settle();
+  assert.equal(env.elements['shortcut-rotate'].textContent, 'Z', 'Other storage areas must not change the guide');
+  env.updateKeys({ rotate: 'b', focus: 'j' });
+  await settle();
+  assert.equal(env.elements['shortcut-rotate'].textContent, 'B');
+  assert.equal(env.elements['shortcut-focus'].textContent, 'J');
+  assert.equal(env.elements['total-reels'].textContent, '3', 'Updating shortcuts must preserve history');
+});
+
+test('standalone help lists all default bindings and remains available without a history file', async () => {
+  const env = dashboard(undefined, { standalone: true });
+  await settle();
+  const context = vm.createContext({ window: { __reelRotator: { state: {}, domUtils: {} } } });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/keymap.js'), 'utf8'), context);
+  const defaults = context.window.__reelRotator.keymap.DEFAULT_KEYMAP;
+  for (const [action, key] of Object.entries(defaults)) {
+    assert.equal(env.elements[`shortcut-${action}`].textContent, key.toUpperCase());
+  }
+  assert.match(env.elements['shortcut-note'].textContent, /Default keys shown/);
+  const html = fs.readFileSync(path.join(__dirname, '../dashboard/index.html'), 'utf8');
+  assert.match(html, /href="#help"/);
+  assert.match(html, /id="help"/);
+  for (const key of ['Space', 'M', 'Shift + D', 'Shift + W', 'Shift + S', 'Shift + 1', 'Shift + 2', 'Shift + 3', 'Shift + 4', '↑', '↓', 'Esc']) {
+    assert.ok(html.includes(`<kbd>${key}</kbd>`), `Help must include ${key}`);
+  }
+  assert.match(html, /MP4/);
+  assert.match(html, /Volume up/);
+  assert.match(html, /Volume down/);
+  for (const speed of ['1×', '1.25×', '1.5×', '2×']) assert.ok(html.includes(`Playback speed: ${speed}`));
+});
 
 test('7-day, 30-day, and all-time dashboard controls render real totals and matching charts', async () => {
   const env = dashboard();
