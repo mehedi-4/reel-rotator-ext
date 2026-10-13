@@ -32,10 +32,10 @@
     if (S.focusMode && S.focusedVideo && document.contains(S.focusedVideo)) {
       return S.focusedVideo;
     }
-    if (S.rotatedVideo && S.rotatedVideo.id !== 'reel-queue-video' && document.contains(S.rotatedVideo) && isVideoVisible(S.rotatedVideo)) {
+    if (S.rotatedVideo && document.contains(S.rotatedVideo) && isVideoVisible(S.rotatedVideo)) {
       return S.rotatedVideo;
     }
-    const videos = Array.from(document.querySelectorAll('video:not(#reel-queue-video)'));
+    const videos = Array.from(document.querySelectorAll('video'));
     if (videos.length === 0) return null;
 
     const visible = videos.filter(isVideoVisible);

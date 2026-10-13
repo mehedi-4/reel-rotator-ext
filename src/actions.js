@@ -135,10 +135,6 @@
     [50, 150, 300].forEach((delay) => {
       setTimeout(() => {
         if (!video || !document.contains(video)) return;
-        if (document.documentElement?.dataset?.rrQueuePlaying === '1') {
-          video.muted = true;
-          return;
-        }
         if (video.muted !== S.userMuted) {
           video.muted = S.userMuted;
         }
@@ -255,34 +251,27 @@
     });
   }
 
-  /**
-   * Download the active video (Shift+D). Targets whichever reel is
-   * "enabled": the queue's video when the queue is playing/hovered or
-   * focused, otherwise the focused/rotated/active feed reel.
-   *
-   * Queue items carry a direct CDN mp4 URL. Feed reels stream via MSE
-   * (blob: src) — the direct URL must be resolved by the MAIN-world
-   * bridge (fiber traversal is invisible from the content script's
-   * isolated world), then the download itself runs in the background
-   * worker via chrome.downloads.
-   */
+  // Resolve streaming feed URLs through the MAIN-world bridge.
+  function requestMainWorldVideoData(timeoutMs = 600) {
+    return new Promise(resolve => {
+      const reqId = 'rr-video-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+      function onResponse(event) {
+        if (event.detail?.reqId !== reqId) return;
+        window.removeEventListener('RR_RESOLVE_VIDEO_RES', onResponse);
+        clearTimeout(timer);
+        resolve({ url: event.detail?.url || null });
+      }
+      window.addEventListener('RR_RESOLVE_VIDEO_RES', onResponse);
+      const timer = setTimeout(() => {
+        window.removeEventListener('RR_RESOLVE_VIDEO_RES', onResponse);
+        resolve({ url: null });
+      }, timeoutMs);
+      window.dispatchEvent(new CustomEvent('RR_RESOLVE_VIDEO_REQ', { detail: { reqId } }));
+    });
+  }
+
+  /** Download the focused, rotated, or active feed reel (Shift+D). */
   async function downloadActiveVideo() {
-    const queueVideo = RR.queue?.getVideoEl?.();
-    const isQueueTarget = (queueVideo && queueVideo === (S.focusMode ? S.focusedVideo : null)) ||
-                          RR.queue?.isQueuePlaying?.() ||
-                          RR.queue?.isHovered?.();
-
-    // ── Queue path: item src is a direct URL ──────────────────────────
-    if (isQueueTarget && queueVideo && queueVideo.src &&
-        S.queueIndex !== -1 && S.queue?.[S.queueIndex]) {
-      const item = S.queue[S.queueIndex];
-      const ok = await downloadViaBackground(item.src, buildDownloadFilename(item.author));
-      RR.ui?.showStatusToast?.(ok ? 'Downloading ⬇' : 'Download failed — opening video in a tab');
-      if (!ok) openVideoInTab(item.src);
-      return ok;
-    }
-
-    // ── Feed / focus path ────────────────────────────────────────────
     const video = getTargetVideo();
     if (!video) {
       RR.ui?.showStatusToast?.('No active video to download');
@@ -297,7 +286,7 @@
     let url = video.currentSrc || video.src || '';
     if (!url || url.startsWith('blob:')) {
       try {
-        const resolved = await RR.queue?.requestMainWorldVideoData?.(600);
+        const resolved = await requestMainWorldVideoData(600);
         if (resolved?.url) url = resolved.url;
       } catch (_) {}
     }

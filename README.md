@@ -13,7 +13,7 @@ Landscape videos on Instagram Reels look tiny and sideways on desktop. You can't
 - **Reel navigation** — W/S keys, arrow keys, mouse wheel, or trackpad (in both focus mode and normal feed). Rotation carries over to the next reel.
 - **Media controls** in focus mode — Space pauses, M mutes.
 - **Native Instagram actions from the keyboard** — Q likes/unlikes, V reposts the active reel.
-- **Customizable shortcuts** — rebind any letter through a toolbar popup. Changes apply live, no reload.
+- **Customizable shortcuts** — rebind feed controls through the toolbar popup. Changes apply live, no reload.
 - **Auto-sizing** — at any rotation, the video fills the viewport while staying fully visible.
 - **Daily reel counter** — a compact Dynamic Island pill or circular punchhole shows today's saved reel count and watch time, changing from green through amber to red as you reach a configurable daily limit.
 - **Local watching dashboard** — 7-day, 30-day, and all-time graphs show reel counts, watching time, weekday patterns, and daily history. Data stays on your computer.
@@ -37,9 +37,9 @@ Same as Chrome, but use `brave://extensions/` instead of `chrome://extensions/`.
 
 ## Usage
 
-### Rebindable shortcuts
+### Keyboard controls
 
-Click the **Reel Rotator** icon in your toolbar to customize. Defaults:
+Default controls are listed below. Customize these keys in the extension settings; previously saved bindings continue to work.
 
 | Key | Action |
 |-----|--------|
@@ -51,16 +51,13 @@ Click the **Reel Rotator** icon in your toolbar to customize. Defaults:
 | `Q` | React (like / unlike) the active reel |
 | `V` | Repost the active reel |
 | `X` | Save the active reel to your Instagram Saved posts |
-| `D` | Add active reel to Queue (plays in right dock) |
-| `T` | Toggle audio focus (Queue vs Main Feed) |
-| `G` | Hide / unhide Queue section |
 
 ### Always-on shortcuts (not rebindable)
 
 | Key | Mode | Action |
 |-----|------|--------|
-| `M` | Anywhere | Mute / unmute the active video (or queue if hovering over dock) |
-| `Shift+D` | Anywhere | Download / save the enabled video (queue or feed) as mp4 |
+| `M` | Anywhere | Mute / unmute the active video |
+| `Shift+D` | Anywhere | Download / save the active reel as mp4 |
 | `Shift+W` | Anywhere | Volume up 10% (unmutes if muted) |
 | `Shift+S` | Anywhere | Volume down 10% — never below 5% |
 | `Shift+1` | Anywhere | Playback speed 1× |
@@ -73,7 +70,7 @@ Click the **Reel Rotator** icon in your toolbar to customize. Defaults:
 | `Esc` | Focus only | Exit focus mode |
 | Click backdrop | Focus only | Exit focus mode |
 
-The user's mute preference is remembered across pause/play and reel changes inside focus mode — unmute with `M` and that preference sticks on the next reel and after a Space pause/resume. Volume and playback-speed preferences behave the same way: once set with `Shift+W`/`Shift+S` or `Shift+1`–`4`, they carry over to the next reel in the feed and in the queue dock.
+The user's mute preference is remembered across pause/play and reel changes inside focus mode — unmute with `M` and that preference sticks on the next reel and after a Space pause/resume. Volume and playback-speed preferences behave the same way: once set with `Shift+W`/`Shift+S` or `Shift+1`–`4`, they carry over to the next reel in the feed.
 
 Volume control never touches the mute state on its own — muting is exclusively `M`'s job (raising volume on a muted video unmutes it, though, since that's what "louder" has to mean). `Shift+S` stops at 5% so a quiet reel never drops to inaudible.
 
@@ -89,7 +86,7 @@ Volume control never touches the mute state on its own — muting is exclusively
 
 Open the extension popup, choose **Dynamic Island**, **Punchhole**, or **Off**, set a **Daily reel limit** (1–9999; default 50), and click **Save**. Changes apply immediately. The 12px pill displays only today's count and total watch time, such as **12 · 03:45**; the configured limit stays hidden. Both values survive leaving Reels, reloading, and restarting the browser, and reset at **local midnight**. Previous days stay in your history.
 
-The first reel of a session is a starting point; each settled change to another reel counts once, including scrolling back. Pausing, replaying, and queue playback do not add to the count. **Watch time** grows while a visible feed reel plays, including loops and replays of the same reel. It excludes pauses, hidden tabs, and queue playback, and matches today's watching time in the dashboard. Sessions from multiple tabs contribute to the same daily totals; watching time sums their playback time.
+The first reel of a session is a starting point; each settled change to another reel counts once, including scrolling back. Pausing and replaying do not add to the count. **Watch time** grows while a visible feed reel plays, including loops and replays of the same reel. It excludes pauses and hidden tabs, and matches today's watching time in the dashboard. Sessions from multiple tabs contribute to the same daily totals; watching time sums their playback time.
 
 The color reaches red at your limit and stays red if you keep scrolling. The limit is a visual reminder; it does not block navigation.
 
@@ -107,9 +104,7 @@ The included `dashboard/history.example.json` is an empty, valid history file. Y
 
 Developers can run the focused tests with Node.js 20+ and `npm test`; using the extension or dashboard does not require Node.js.
 
-### Keyboard shortcuts
-
-Click the **Reel Rotator** icon in your Chrome / Brave toolbar to open the Settings popup. Each rebindable shortcut has a letter input; changes apply **instantly** on the Instagram tab — no reload. Use **Reset to defaults** to restore the original bindings.
+The settings popup contains keyboard bindings, the counter display, daily limit, and dashboard link. **Save** applies changes immediately. **Reset to defaults** restores keyboard bindings and counter settings, and keeps recorded history.
 
 ## Project Structure
 
@@ -119,10 +114,10 @@ reel-rotator-ext/
 ├── background.js         # Service worker: downloads + durable history and JSON file updates
 ├── content.js             # Thin orchestrator (~30 lines: init + event wiring)
 ├── popup.html / .js / .css # Settings popup (opened via toolbar icon)
-├── styles.css             # On-page styles (rotate button, focus backdrop, queue dock)
+├── styles.css             # On-page styles (counter, rotate button, focus backdrop, status toast)
 ├── src/
-│   ├── bridge.js          # MAIN-world script: React Fiber extraction & feed mute enforcement
-│   ├── state.js           # Single source of truth: rotation/focus/nav/queue state
+│   ├── bridge.js          # MAIN-world script: React Fiber extraction and native audio controls
+│   ├── state.js           # Single source of truth: rotation/focus/nav state
 │   ├── counter-settings.js # Shared counter defaults and settings validation
 │   ├── counter.js         # Daily reel count, watch-time capture, and indicator
 │   ├── stats-model.js     # Shared daily history, snapshot merging, and date-range aggregation
@@ -132,7 +127,6 @@ reel-rotator-ext/
 │   ├── rotation.js        # handleRotate, applyRotation, applyRotationInFocus
 │   ├── focus.js           # Focus mode + scroll-driven reel navigation
 │   ├── actions.js         # reactLike, repost
-│   ├── queue.js           # YouTube-style persistent Reels queue, drag & drop, playlist
 │   ├── ui.js              # Button creation + observer setup
 │   └── keymap.js          # Keyboard dispatcher + storage hydration + live updates
 ├── dashboard/            # Standalone index.html, charts, styles, and example history JSON
@@ -141,15 +135,6 @@ reel-rotator-ext/
 ```
 
 Feed controls attach to a shared namespace (`window.__reelRotator`), loaded in dependency order declared in `manifest.json`. The history model is shared as `RRStats` between the counter, service worker, and offline dashboard.
-
-### Features & Key Fixes in this build
-
-- **Reels Queue Dock (D)**: YouTube-style right side panel to enqueue reels, drag-and-drop reordering, delete, and autoplay next.
-- **Scroll Wheel Click (Middle Click)**: Middle-clicking any reel in the queue playlist or the queue player opens that reel directly in a new tab.
-- **Playback Coordination**: When a reel in the main feed starts playing (scroll, click, or loop), the queue video automatically pauses.
-- **Rotation Memory in Queue**: When adding a rotated reel to the queue (`D`), it remembers its exact rotation and plays at that rotation in the queue.
-- **Queue Player Proportions**: Expanded video height in the queue (up to 72vh / 640px) with compact, space-efficient playlist items below.
-- **Strict Continuous Feed Muting**: While the queue video plays audio, feed videos stay strictly muted even across scrolling and video loops. Toggle audio focus anytime with `T`.
 
 ## License
 

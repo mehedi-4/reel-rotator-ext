@@ -77,30 +77,33 @@
    */
   function resetRotation(video) {
     if (!video) return;
-    video.style.transform = '';
-    video.style.transition = '';
-    video.style.transformOrigin = '';
-    video.style.objectFit = '';
     clearOverflowMods();
     S.rotation = 0;
     S.rotatedVideo = null;
 
     if (S.focusMode && S.focusedVideo === video && video.parentElement === document.body) {
-      // Re-apply the focus-mode layout at 0° ONLY if the video is currently focused in document.body.
-      RR.focus?.reapplyBaseline?.(video);
-    } else if (video.parentElement !== document.body) {
-      // Ensure no focus-mode or lingering rotation styles remain on feed videos
-      video.style.position = '';
-      video.style.zIndex = '';
-      video.style.top = '';
-      video.style.left = '';
-      video.style.width = '';
-      video.style.height = '';
-      video.style.maxWidth = '';
-      video.style.maxHeight = '';
-      video.style.margin = '';
-      video.style.borderRadius = '';
-      video.style.boxShadow = '';
+      // Keep the current transform so the final quarter-turn can animate
+      // through ±360° while restoring the upright focus-mode dimensions.
+      RR.focus?.reapplyBaseline?.(video, 0);
+    } else {
+      video.style.transform = '';
+      video.style.transition = '';
+      video.style.transformOrigin = '';
+      video.style.objectFit = '';
+      if (video.parentElement !== document.body) {
+        // Ensure no focus-mode or lingering rotation styles remain on feed videos
+        video.style.position = '';
+        video.style.zIndex = '';
+        video.style.top = '';
+        video.style.left = '';
+        video.style.width = '';
+        video.style.height = '';
+        video.style.maxWidth = '';
+        video.style.maxHeight = '';
+        video.style.margin = '';
+        video.style.borderRadius = '';
+        video.style.boxShadow = '';
+      }
     }
 
     RR.ui?.updateButtonState?.();

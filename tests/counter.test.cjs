@@ -59,7 +59,7 @@ function environment({ stored = {}, pathname = '/reels/', elements = {}, inputs 
     createElement: tag => new Element(tag),
     contains: element => element.isConnected,
     querySelectorAll: selector => selector === 'input[data-action]'
-      ? inputs : videos.filter(element => element.id !== 'reel-queue-video'),
+      ? inputs : videos,
     getElementById: id => elements[id] || body.children.find(element => element.id === id),
     addEventListener: (type, listener) => { listeners[type] = listener; },
   };
@@ -211,7 +211,7 @@ test('reel permalinks prevent counting quality changes and distinguish identical
   assert.equal(env.RR.state.reelCount, 1);
 });
 
-test('focus navigation counts the new reel without counting queue playback', () => {
+test('focus navigation counts the settled reel and ignores offscreen playback', () => {
   const env = counter();
   const S = env.RR.state;
   S.focusMode = true;
@@ -227,10 +227,10 @@ test('focus navigation counts the new reel without counting queue playback', () 
   S.focusedVideo = second;
   env.settle(second);
   assert.equal(S.reelCount, 1);
-  const queued = video('https://example.test/queue.mp4');
-  queued.id = 'reel-queue-video';
-  S.focusedVideo = queued;
-  env.emit('play', queued);
+  const offscreen = video('https://example.test/offscreen.mp4', { top: 1000, bottom: 1800 });
+  env.setVideos([offscreen]);
+  S.focusedVideo = offscreen;
+  env.emit('play', offscreen);
   env.advance(1000);
   assert.equal(S.reelCount, 1);
 });
@@ -407,28 +407,63 @@ function popup(stored = {}) {
   });
   const elements = Object.fromEntries(['status', 'counter-display', 'reel-limit', 'settings-form', 'reset']
     .map(id => [id, new Element()]));
+  elements['settings-form'].requestSubmit = () => elements['settings-form'].dispatch('submit');
   const env = environment({ stored, elements, inputs });
   ['src/counter-settings.js', 'popup.js'].forEach(env.load);
   return { ...env, elements, inputs };
 }
 
-test('popup hydrates, saves counter settings with shortcuts, and resets both', () => {
-  const env = popup({ keymap: { rotate: 'z' }, reelCounter: { display: 'punchhole', limit: 20 } });
-  assert.equal(env.inputs[0].value, 'z');
+test('popup restores feed bindings, applies edits live, and resets settings without changing history', () => {
+  const stats = { version: 1, sessions: {}, updatedAt: 0 };
+  const env = popup({ keymap: { rotate: 'Z', addToQueue: 'd', toggleAudio: 't', toggleQueue: 'g' },
+    reelStats: stats, reelCounter: { display: 'punchhole', limit: 20 } });
+  ['src/state.js', 'src/dom-utils.js', 'src/keymap.js'].forEach(env.load);
+  const keymap = env.window.__reelRotator.keymap;
+  keymap.setupStorageListener();
+  assert.deepEqual(env.inputs.map(input => input.dataset.action), Object.keys(keymap.DEFAULT_KEYMAP));
+  assert.equal(env.inputs.length, 8, 'Only the eight remaining feed controls may be rebound');
+  const rotate = env.inputs.find(input => input.dataset.action === 'rotate');
+  assert.equal(rotate.value, 'z');
+  assert.equal(env.writes.length, 0, 'Opening settings must preserve saved preferences');
   assert.equal(env.elements['counter-display'].value, 'punchhole');
   assert.equal(env.elements['reel-limit'].value, 20);
+  rotate.value = 'b';
   env.elements['counter-display'].value = 'off';
   env.elements['reel-limit'].value = '30';
   env.elements['settings-form'].dispatch('submit');
   const saved = env.writes.at(-1);
-  assert.equal(saved.keymap.rotate, 'z');
+  assert.equal(saved.keymap.rotate, 'b');
+  assert.deepEqual(Object.keys(saved.keymap), Object.keys(keymap.DEFAULT_KEYMAP));
+  assert.equal(keymap._getKeymap().rotate, 'b', 'Saved keys must reach the feed dispatcher without reloading');
   assert.equal(saved.reelCounter.display, 'off');
   assert.equal(saved.reelCounter.limit, 30);
   assert.match(env.elements.status.textContent, /Saved/);
   env.elements.reset.dispatch('click');
   assert.equal(env.elements['counter-display'].value, 'island');
   assert.equal(env.elements['reel-limit'].value, 50);
-  assert.equal(env.inputs[0].value, 'r');
+  assert.deepEqual(env.stored.keymap, keymap.DEFAULT_KEYMAP);
+  assert.deepEqual(keymap._getKeymap(), keymap.DEFAULT_KEYMAP);
+  env.inputs.forEach(input => assert.equal(input.value, keymap.DEFAULT_KEYMAP[input.dataset.action]));
+  assert.equal(env.stored.reelStats, stats);
+});
+
+test('popup keeps existing feed-key migrations and single-character editing, including Enter to save', () => {
+  const env = popup({ keymap: { nextReel: 'A', save: '' } });
+  const next = env.inputs.find(input => input.dataset.action === 'nextReel');
+  const save = env.inputs.find(input => input.dataset.action === 'save');
+  assert.equal(next.value, 's');
+  assert.equal(save.value, 'x');
+  next.value = 'NB';
+  next.dispatch('input');
+  assert.equal(next.value, 'b');
+  next.dispatch('keydown', { key: 'Enter' });
+  assert.equal(env.stored.keymap.nextReel, 'b');
+  assert.match(env.elements.status.textContent, /Saved/);
+  next.value = '';
+  const writesBefore = env.writes.length;
+  env.elements['settings-form'].dispatch('submit');
+  assert.equal(env.writes.length, writesBefore);
+  assert.match(env.elements.status.textContent, /Please set a key for: nextReel/);
 });
 
 test('invalid limits and failed storage writes do not report success', () => {

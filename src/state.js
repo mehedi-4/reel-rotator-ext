@@ -51,11 +51,6 @@
     // Playback speed preference (Shift+1..4). null = unset; re-asserted on reel changes.
     userPlaybackRate: null,
 
-    // Queue feature state
-    queue: [],                    // Array of { id, src, author, caption, thumbnail, permalink, finished }
-    queueIndex: -1,               // Index of currently playing queued item
-    queueAudioTarget: 'queue',    // 'queue' | 'main'
-    queueVisible: false,          // Whether the queue side panel is open
   };
 
   // ── Helpers ─────────────────────────────────────────────────────────

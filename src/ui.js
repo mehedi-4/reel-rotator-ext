@@ -34,11 +34,7 @@
     S.btn.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      if (RR.queue?.isQueuePlaying?.()) {
-        RR.queue.rotateActiveQueueItem(90);
-      } else {
-        RR.rotation.handleRotate();
-      }
+      RR.rotation.handleRotate();
     });
 
     document.body.appendChild(S.btn);
@@ -47,10 +43,7 @@
   /** Update the visual state of the rotate button based on current rotation. */
   function updateButtonState() {
     if (!S.btn) return;
-    const isQueue = RR.queue?.isQueuePlaying?.();
-    const activeRot = isQueue
-      ? (S.queue?.[S.queueIndex]?.rotation || 0)
-      : S.rotation;
+    const activeRot = S.rotation;
     if (activeRot !== 0) {
       S.btn.classList.add('rotated');
       S.degreeBadge.textContent = activeRot + '°';
@@ -89,9 +82,7 @@
    * Mode-agnostic feedback toast for volume / playback-rate shortcuts.
    * In focus mode the focused video (z-index 1000001) and backdrop sit
    * ABOVE the regular toast (z-index 999999), so we switch to the focus
-   * status overlay there. Otherwise reuse the queue's toast element
-   * (same visual, one element) — creating it defensively if the queue
-   * hasn't built it yet.
+   * status overlay there. Otherwise use the regular status toast.
    */
   function showStatusToast(message) {
     if (!message) return;
@@ -100,11 +91,11 @@
       return;
     }
 
-    let toast = document.getElementById('reel-queue-toast');
+    let toast = document.getElementById('reel-status-toast');
     if (!toast) {
       toast = document.createElement('div');
-      toast.id = 'reel-queue-toast';
-      toast.className = 'rq-toast';
+      toast.id = 'reel-status-toast';
+      toast.className = 'rr-status-toast';
       document.body.appendChild(toast);
     }
 
@@ -232,16 +223,15 @@
 
       if (S.focusMode) {
         // A different video started playing in the feed. Adopt it immediately.
-        if (vid !== S.focusedVideo && vid.id !== 'reel-queue-video') {
+        if (vid !== S.focusedVideo) {
           RR.focus?.refocusOn?.(vid);
         }
       } else if (S.rotatedVideo && vid !== S.rotatedVideo) {
         resetIfActive();
       }
 
-      // If user has set an audio preference (S.userMuted !== null) and queue is not playing:
-      // ensure the newly playing reel plays with that preference.
-      if (vid.id !== 'reel-queue-video' && S.userMuted !== null && document.documentElement?.dataset?.rrQueuePlaying !== '1') {
+      // Ensure newly playing reels use the user's audio preference.
+      if (S.userMuted !== null) {
         if (S.userMuted === false) {
           if (vid.muted) {
             vid.muted = false;
@@ -254,13 +244,13 @@
       }
 
       // Re-assert volume preference (Shift+W / Shift+S) on newly playing
-      // feed reels. Queue video is skipped — queue.js owns its own state.
-      if (vid.id !== 'reel-queue-video' && S.userVolume !== null) {
+      // feed reels.
+      if (S.userVolume !== null) {
         vid.volume = S.userVolume;
       }
 
       // Re-assert playback speed preference (Shift+1..4) on newly playing
-      // reels — both feed and queue video.
+      // reels.
       if (S.userPlaybackRate !== null) {
         try { vid.playbackRate = S.userPlaybackRate; } catch (_) {}
       }
@@ -269,8 +259,7 @@
     // Keep S.userMuted in sync if the user manually toggles audio using Instagram's on-screen button
     document.addEventListener('volumechange', (e) => {
       const vid = e.target;
-      if (vid.tagName !== 'VIDEO' || vid.id === 'reel-queue-video') return;
-      if (document.documentElement?.dataset?.rrQueuePlaying === '1') return;
+      if (vid.tagName !== 'VIDEO') return;
       S.userMuted = vid.muted;
     }, true);
   }
@@ -284,7 +273,6 @@
     setupScrollReset();
     setupVideoPlayReset();
     RR.focus.setupScroll();
-    RR.queue?.init?.();
     RR.counter.init();
 
     toggleButton(isReelsPage());

@@ -88,7 +88,7 @@
   function activeReel() {
     if (S.focusNavigating) return null;
     const video = RR.domUtils.findActiveVideo();
-    if (!video || video.id === 'reel-queue-video' || !document.contains(video)) return null;
+    if (!video || !document.contains(video)) return null;
 
     const rect = video.getBoundingClientRect();
     const visibleHeight = Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, 0);
@@ -247,7 +247,7 @@
     // Capture the final playback interval immediately when play/pause changes.
     for (const type of ['play', 'pause', 'ended']) {
       document.addEventListener(type, (event) => {
-        if (event.target.tagName === 'VIDEO' && event.target.id !== 'reel-queue-video') sample();
+        if (event.target.tagName === 'VIDEO') sample();
       }, true);
     }
     document.addEventListener('loadeddata', schedule, true);

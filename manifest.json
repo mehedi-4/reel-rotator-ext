@@ -26,7 +26,6 @@
         "src/rotation.js",
         "src/focus.js",
         "src/actions.js",
-        "src/queue.js",
         "src/counter.js",
         "src/ui.js",
         "src/keymap.js",
