@@ -96,7 +96,7 @@ Click **Open watching dashboard** in the extension settings. It opens the bundle
 
 The dashboard includes selectable 7-day, 30-day, and all-time ranges, daily reel-count bars, watching-time graphs, weekday averages, summary totals, and a paginated daily-history table. Long histories are grouped by month in the charts; the table keeps exact daily totals. Charts compare historical activity with your **current** daily limit. History starts when this version begins recording; past activity cannot be reconstructed.
 
-The **Help & shortcuts** menu lists all reel, download, volume, playback-speed, focus, and mouse controls. Opened through the extension, it shows your saved custom keys and updates when settings change. The standalone HTML shows the default keys.
+The **Help & shortcuts** menu lists reel actions, download, volume, and playback-speed controls. Opened through the extension, it shows your saved custom keys and updates when settings change. The standalone HTML shows the default keys.
 
 For a JSON file on disk, click **Save JSON** in the dashboard and choose where to save `reel-history.json`. In browsers supporting direct file access, the extension remembers your chosen file and updates it whenever activity is saved while file permission remains granted, including with the dashboard closed. The page reads that JSON to render its charts. History also remains in browser storage, so a disconnected file does not lose new activity. If the browser requires file permission again after a restart, click **Reconnect file**. **Open JSON** imports an existing history file, merging records without double-counting.
 

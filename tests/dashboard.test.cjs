@@ -120,9 +120,10 @@ test('standalone help lists all default bindings and remains available without a
   const html = fs.readFileSync(path.join(__dirname, '../dashboard/index.html'), 'utf8');
   assert.match(html, /href="#help"/);
   assert.match(html, /id="help"/);
-  for (const key of ['Space', 'M', 'Shift + D', 'Shift + W', 'Shift + S', 'Shift + 1', 'Shift + 2', 'Shift + 3', 'Shift + 4', '↑', '↓', 'Esc']) {
+  for (const key of ['Space', 'M', 'Shift + D', 'Shift + W', 'Shift + S', 'Shift + 1', 'Shift + 2', 'Shift + 3', 'Shift + 4']) {
     assert.ok(html.includes(`<kbd>${key}</kbd>`), `Help must include ${key}`);
   }
+  assert.doesNotMatch(html, /focus-controls-title|mouse-controls-title/);
   assert.match(html, /MP4/);
   assert.match(html, /Volume up/);
   assert.match(html, /Volume down/);
