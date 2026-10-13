@@ -8,58 +8,78 @@
 <body>
   <header>
     <h1>Reel Rotator</h1>
-    <p class="subtitle">Customize your keyboard shortcuts.</p>
+    <p class="subtitle">Reel counter and keyboard shortcuts.</p>
   </header>
 
   <form id="settings-form">
-    <div class="row">
-      <label for="rotate">Rotate (counter-clockwise)</label>
-      <input id="rotate" data-action="rotate" maxlength="1" autocomplete="off" spellcheck="false">
-    </div>
-    <div class="row">
-      <label for="rotateCW">Rotate (clockwise)</label>
-      <input id="rotateCW" data-action="rotateCW" maxlength="1" autocomplete="off" spellcheck="false">
-    </div>
-    <div class="row">
-      <label for="focus">Focus mode</label>
-      <input id="focus" data-action="focus" maxlength="1" autocomplete="off" spellcheck="false">
-    </div>
-    <div class="row">
-      <label for="prevReel">Previous reel (up)</label>
-      <input id="prevReel" data-action="prevReel" maxlength="1" autocomplete="off" spellcheck="false">
-    </div>
-    <div class="row">
-      <label for="nextReel">Next reel (down)</label>
-      <input id="nextReel" data-action="nextReel" maxlength="1" autocomplete="off" spellcheck="false">
-    </div>
-    <div class="row">
-      <label for="react">React (like)</label>
-      <input id="react" data-action="react" maxlength="1" autocomplete="off" spellcheck="false">
-    </div>
-    <div class="row">
-      <label for="repost">Repost</label>
-      <input id="repost" data-action="repost" maxlength="1" autocomplete="off" spellcheck="false">
-    </div>
-    <div class="row">
-      <label for="save">Save (bookmark)</label>
-      <input id="save" data-action="save" maxlength="1" autocomplete="off" spellcheck="false">
-    </div>
-    <div class="row">
-      <label for="addToQueue">Add to queue</label>
-      <input id="addToQueue" data-action="addToQueue" maxlength="1" autocomplete="off" spellcheck="false">
-    </div>
-    <div class="row">
-      <label for="toggleAudio">Toggle audio (queue/feed)</label>
-      <input id="toggleAudio" data-action="toggleAudio" maxlength="1" autocomplete="off" spellcheck="false">
-    </div>
-    <div class="row">
-      <label for="toggleQueue">Hide / unhide queue</label>
-      <input id="toggleQueue" data-action="toggleQueue" maxlength="1" autocomplete="off" spellcheck="false">
+    <fieldset class="counter-settings">
+      <legend>Reel counter</legend>
+      <div class="row">
+        <label for="counter-display">Display</label>
+        <select id="counter-display">
+          <option value="island">Dynamic Island</option>
+          <option value="punchhole">Punchhole</option>
+          <option value="off">Off</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="reel-limit">Daily reel limit</label>
+        <input id="reel-limit" type="number" min="1" max="9999" step="1" required aria-describedby="counter-hint">
+      </div>
+      <p id="counter-hint">Today’s count and watch time are saved and reset at midnight.</p>
+      <a id="dashboard-link" href="dashboard/index.html" target="_blank" rel="noopener">Open watching dashboard ↗</a>
+    </fieldset>
+
+    <div class="shortcut-settings" role="group" aria-label="Keyboard shortcuts">
+      <div class="row">
+        <label for="rotate">Rotate (counter-clockwise)</label>
+        <input id="rotate" data-action="rotate" maxlength="1" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="row">
+        <label for="rotateCW">Rotate (clockwise)</label>
+        <input id="rotateCW" data-action="rotateCW" maxlength="1" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="row">
+        <label for="focus">Focus mode</label>
+        <input id="focus" data-action="focus" maxlength="1" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="row">
+        <label for="prevReel">Previous reel (up)</label>
+        <input id="prevReel" data-action="prevReel" maxlength="1" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="row">
+        <label for="nextReel">Next reel (down)</label>
+        <input id="nextReel" data-action="nextReel" maxlength="1" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="row">
+        <label for="react">React (like)</label>
+        <input id="react" data-action="react" maxlength="1" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="row">
+        <label for="repost">Repost</label>
+        <input id="repost" data-action="repost" maxlength="1" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="row">
+        <label for="save">Save (bookmark)</label>
+        <input id="save" data-action="save" maxlength="1" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="row">
+        <label for="addToQueue">Add to queue</label>
+        <input id="addToQueue" data-action="addToQueue" maxlength="1" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="row">
+        <label for="toggleAudio">Toggle audio (queue/feed)</label>
+        <input id="toggleAudio" data-action="toggleAudio" maxlength="1" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="row">
+        <label for="toggleQueue">Hide / unhide queue</label>
+        <input id="toggleQueue" data-action="toggleQueue" maxlength="1" autocomplete="off" spellcheck="false">
+      </div>
     </div>
 
     <div class="actions">
       <button type="button" id="reset">Reset to defaults</button>
-      <button type="submit" id="save">Save</button>
+      <button type="submit" id="save-settings">Save</button>
     </div>
 
     <p id="status" role="status" aria-live="polite"></p>
@@ -69,6 +89,7 @@
     <p>Changes apply instantly on the Instagram tab — no reload needed.</p>
   </footer>
 
+  <script src="src/counter-settings.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

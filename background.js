@@ -7,6 +7,8 @@
 // API has no such restriction (it's how Chrome's own "Download video"
 // context-menu item works).
 
+importScripts('src/stats-model.js', 'src/stats-file.js', 'src/stats-background.js');
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type !== 'RR_DOWNLOAD') return false;
 

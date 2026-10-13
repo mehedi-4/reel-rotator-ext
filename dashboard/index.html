@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Reel Rotator — Watching history</title>
+  <link rel="stylesheet" href="./dashboard.css">
+  <script src="../src/stats-model.js" defer></script>
+  <script src="../src/stats-file.js" defer></script>
+  <script src="./dashboard.js" defer></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="#overview">Reel Rotator<span>Watching history</span></a>
+    <div class="sidebar-label">YOUR ACTIVITY</div>
+    <a class="nav-link active" href="#overview">Overview</a>
+    <a class="nav-link" href="#patterns">Watching patterns</a>
+    <a class="nav-link" href="#history">Daily history</a>
+    <div class="local-note"><span class="status-dot"></span>Stored on this computer<p>Your history stays local.</p></div>
+  </aside>
+
+  <main id="overview">
+    <header class="page-header">
+      <div><p class="eyebrow">A LITTLE MORE AWARENESS</p><h1>Your time on Reels.</h1><p class="intro">See what a few more scrolls add up to.</p></div>
+      <div class="connection"><span class="status-dot"></span><span id="connection-status" role="status">Loading local history…</span><button id="refresh" type="button">Refresh</button></div>
+    </header>
+
+    <div class="toolbar">
+      <div class="range-controls" role="group" aria-label="History range">
+        <button type="button" data-range="7" aria-pressed="true">7 days</button>
+        <button type="button" data-range="30" aria-pressed="false">30 days</button>
+        <button type="button" data-range="all" aria-pressed="false">All time</button>
+      </div>
+      <p id="range-caption">Including today · local time</p>
+    </div>
+
+    <section class="file-controls" aria-label="Local history file">
+      <div><strong id="file-name">Local history</strong><p id="file-hint">Save a JSON file to keep it updated automatically as you watch.</p></div>
+      <div class="file-buttons"><button id="open-json" type="button">Open JSON</button><button id="save-json" class="primary-button" type="button">Save JSON</button><button id="reconnect-json" type="button" hidden>Reconnect file</button></div>
+      <input id="json-input" type="file" accept=".json,application/json" hidden>
+    </section>
+    <div id="error-state" class="notice error" role="alert" hidden></div>
+    <div id="empty-state" class="notice" hidden><strong>Your history starts here.</strong> Watch Reels with the extension enabled, or open a saved history JSON file.</div>
+
+    <section class="metrics" aria-label="Watching statistics">
+      <article class="metric"><p>Reels scrolled</p><strong id="total-reels">—</strong><span id="reel-average">Across the selected period</span></article>
+      <article class="metric"><p>Time watching</p><strong id="total-time">—</strong><span>Visible, playing reels only</span></article>
+      <article class="metric"><p>Watching sessions</p><strong id="total-sessions">—</strong><span id="session-average">Each visit to Reels is a session</span></article>
+      <article class="metric today"><p>Today’s daily limit</p><strong><span id="today-reels">—</span><small id="today-limit"></small></strong><div class="limit-track"><div id="limit-fill"></div></div><span id="limit-caption">Resets at local midnight</span></article>
+    </section>
+
+    <section class="panel main-chart" aria-labelledby="reel-chart-title">
+      <div class="panel-heading"><div><h2 id="reel-chart-title">The scroll, day by day</h2><p id="reel-chart-subtitle">Reels scrolled each day</p></div><span class="legend"><i></i>Reels<span class="limit-legend">- - Current daily limit</span></span></div>
+      <div id="reel-chart" class="chart"></div>
+      <p id="reel-chart-caption" class="chart-caption">Hover over a bar for the exact count.</p>
+    </section>
+
+    <section class="chart-grid" id="patterns">
+      <article class="panel" aria-labelledby="time-chart-title"><div class="panel-heading"><div><h2 id="time-chart-title">Time spent watching</h2><p>Playback time, excluding pauses and hidden tabs</p></div><span class="legend"><i></i>Minutes</span></div><div id="time-chart" class="chart compact"></div></article>
+      <article class="panel" aria-labelledby="weekday-chart-title"><div class="panel-heading"><div><h2 id="weekday-chart-title">Your weekly rhythm</h2><p>Average reels per day of the week</p></div></div><div id="weekday-chart" class="chart compact"></div></article>
+    </section>
+
+    <section class="panel history-panel" id="history" aria-labelledby="history-title">
+      <div class="panel-heading"><div><h2 id="history-title">Daily history</h2><p>Every day in the selected period, including quiet ones</p></div><span id="history-count" class="muted"></span></div>
+      <div class="table-wrap"><table><thead><tr><th scope="col">Date</th><th scope="col">Reels scrolled</th><th scope="col">Time watching</th><th scope="col">Sessions</th><th scope="col">Current daily limit</th></tr></thead><tbody id="history-body"></tbody></table></div>
+      <div class="pagination"><span id="page-caption"></span><div><button type="button" id="previous-page">Previous</button><button type="button" id="next-page">Next</button></div></div>
+    </section>
+
+    <footer class="page-footer"><p>Today’s count resets at local midnight. Previous days remain in your history.</p><p>The first reel starts at zero; each settled change counts once. Queue playback is excluded.</p></footer>
+  </main>
+</body>
+</html>

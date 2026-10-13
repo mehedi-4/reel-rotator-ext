@@ -20,11 +20,14 @@
       "matches": ["https://www.instagram.com/*"],
       "js": [
         "src/state.js",
+        "src/counter-settings.js",
+        "src/stats-model.js",
         "src/dom-utils.js",
         "src/rotation.js",
         "src/focus.js",
         "src/actions.js",
         "src/queue.js",
+        "src/counter.js",
         "src/ui.js",
         "src/keymap.js",
         "content.js"

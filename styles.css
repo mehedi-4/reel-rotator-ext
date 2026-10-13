@@ -1,4 +1,72 @@
 
+/* Top-center daily count and watch time, above the focused video. */
+#reel-counter {
+  --rr-counter-color: hsl(120, 78%, 62%);
+  --rr-counter-angle: 0deg;
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000003;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 112px;
+  height: 30px;
+  padding: 4px 12px;
+  border: 1px solid var(--rr-counter-color);
+  border-radius: 999px;
+  background: #08090b;
+  box-shadow: 0 5px 24px rgba(0, 0, 0, 0.35);
+  color: #f5f5f7;
+  font: 600 12px/1.15 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+  pointer-events: none;
+  transition: border-color 0.3s ease, color 0.3s ease;
+}
+
+#reel-counter[hidden] { display: none; }
+#reel-counter .rr-counter-readout {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#reel-counter .rr-counter-count {
+  color: var(--rr-counter-color);
+  transition: color 0.3s ease;
+}
+#reel-counter .rr-counter-time {
+  color: #a3a5ad;
+  font-weight: 500;
+}
+#reel-counter .rr-counter-separator { color: #686b75; }
+
+#reel-counter[data-display="punchhole"] {
+  min-width: 58px;
+  width: 58px;
+  height: 58px;
+  padding: 4px;
+  border: 0;
+  background: radial-gradient(circle closest-side, #08090b calc(100% - 3px), transparent calc(100% - 2px)),
+    conic-gradient(var(--rr-counter-color) var(--rr-counter-angle), #303238 0);
+  font-size: 15px;
+}
+
+#reel-counter[data-display="punchhole"] .rr-counter-readout {
+  flex-direction: column;
+  gap: 2px;
+}
+#reel-counter[data-display="punchhole"] .rr-counter-separator { display: none; }
+#reel-counter[data-display="punchhole"] .rr-counter-time { font-size: 9px; }
+
+@media (prefers-reduced-motion: reduce) {
+  #reel-counter, #reel-counter .rr-counter-count { transition: none; }
+}
+
 #reel-rotate-btn {
   position: fixed;
   bottom: 120px;

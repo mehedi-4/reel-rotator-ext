@@ -1,6 +1,5 @@
 // ─── popup.js ────────────────────────────────────────────────────
-// Settings popup: load keybinds from chrome.storage.local, let the
-// user rebind them, write back. Single-letter inputs only.
+// Settings popup: reel counter preferences and single-letter keybinds.
 
 (function () {
   'use strict';
@@ -22,14 +21,17 @@
 
   const inputs = Array.from(document.querySelectorAll('input[data-action]'));
   const statusEl = document.getElementById('status');
+  const displayInput = document.getElementById('counter-display');
+  const limitInput = document.getElementById('reel-limit');
+  const counterSettings = window.__reelRotator.counterSettings;
 
   function showStatus(msg, isError) {
     statusEl.textContent = msg;
     statusEl.dataset.error = isError ? '1' : '';
   }
 
-  function loadKeymap() {
-    chrome.storage.local.get({ keymap: DEFAULTS }, (res) => {
+  function loadSettings() {
+    chrome.storage.local.get({ keymap: DEFAULTS, reelCounter: counterSettings.DEFAULTS }, (res) => {
       const stored = res.keymap || {};
       delete stored.send;
       delete stored.comment;
@@ -47,6 +49,9 @@
       inputs.forEach((inp) => {
         inp.value = (km[inp.dataset.action] || '').toLowerCase();
       });
+      const counter = counterSettings.normalize(res.reelCounter);
+      displayInput.value = counter.display;
+      limitInput.value = counter.limit;
     });
   }
 
@@ -78,18 +83,34 @@
       showStatus(`Please set a key for: ${empty.join(', ')}`, true);
       return;
     }
-    chrome.storage.local.set({ keymap }, () => {
+    const limit = Number(limitInput.value);
+    if (!Number.isInteger(limit) || limit < 1 || limit > counterSettings.MAX_LIMIT) {
+      showStatus(`Set a reel limit from 1 to ${counterSettings.MAX_LIMIT}.`, true);
+      return;
+    }
+    const reelCounter = counterSettings.normalize({ display: displayInput.value, limit });
+    chrome.storage.local.set({ keymap, reelCounter }, () => {
+      if (chrome.runtime.lastError) {
+        showStatus('Could not save settings. Please try again.', true);
+        return;
+      }
       showStatus('Saved! Changes apply instantly.');
     });
   });
 
   document.getElementById('reset').addEventListener('click', () => {
-    chrome.storage.local.set({ keymap: DEFAULTS }, () => {
+    chrome.storage.local.set({ keymap: DEFAULTS, reelCounter: counterSettings.DEFAULTS }, () => {
+      if (chrome.runtime.lastError) {
+        showStatus('Could not reset settings. Please try again.', true);
+        return;
+      }
       inputs.forEach((inp) => { inp.value = DEFAULTS[inp.dataset.action]; });
+      displayInput.value = counterSettings.DEFAULTS.display;
+      limitInput.value = counterSettings.DEFAULTS.limit;
       showStatus('Reset to defaults.');
     });
   });
 
   // Initial load.
-  loadKeymap();
+  loadSettings();
 })();

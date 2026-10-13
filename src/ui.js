@@ -141,6 +141,7 @@
 
     let debounceTimer = null;
     RR._mutationObserver = new MutationObserver(() => {
+      RR.counter?.schedule();
       if (debounceTimer) clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => toggleButton(isReelsPage()), 300);
     });
@@ -173,6 +174,7 @@
         lastUrl = currentUrl;
         resetIfActive();
         toggleButton(isReelsPage());
+        RR.counter?.sample();
       }
     }
   }
@@ -283,6 +285,7 @@
     setupVideoPlayReset();
     RR.focus.setupScroll();
     RR.queue?.init?.();
+    RR.counter.init();
 
     toggleButton(isReelsPage());
   }

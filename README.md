@@ -15,6 +15,8 @@ Landscape videos on Instagram Reels look tiny and sideways on desktop. You can't
 - **Native Instagram actions from the keyboard** — Q likes/unlikes, V reposts the active reel.
 - **Customizable shortcuts** — rebind any letter through a toolbar popup. Changes apply live, no reload.
 - **Auto-sizing** — at any rotation, the video fills the viewport while staying fully visible.
+- **Daily reel counter** — a compact Dynamic Island pill or circular punchhole shows today's saved reel count and watch time, changing from green through amber to red as you reach a configurable daily limit.
+- **Local watching dashboard** — 7-day, 30-day, and all-time graphs show reel counts, watching time, weekday patterns, and daily history. Data stays on your computer.
 
 ## Install
 
@@ -81,7 +83,31 @@ Volume control never touches the mute state on its own — muting is exclusively
 - **Mouse wheel / trackpad** (focus mode) — navigate reels. One gesture = one reel. Rotation carries over.
 - **Scroll outside focus mode** — resets rotation.
 
-## Customizing Shortcuts
+## Settings
+
+### Reel counter settings
+
+Open the extension popup, choose **Dynamic Island**, **Punchhole**, or **Off**, set a **Daily reel limit** (1–9999; default 50), and click **Save**. Changes apply immediately. The 12px pill displays only today's count and total watch time, such as **12 · 03:45**; the configured limit stays hidden. Both values survive leaving Reels, reloading, and restarting the browser, and reset at **local midnight**. Previous days stay in your history.
+
+The first reel of a session is a starting point; each settled change to another reel counts once, including scrolling back. Pausing, replaying, and queue playback do not add to the count. **Watch time** grows while a visible feed reel plays, including loops and replays of the same reel. It excludes pauses, hidden tabs, and queue playback, and matches today's watching time in the dashboard. Sessions from multiple tabs contribute to the same daily totals; watching time sums their playback time.
+
+The color reaches red at your limit and stays red if you keep scrolling. The limit is a visual reminder; it does not block navigation.
+
+### Local dashboard
+
+Click **Open watching dashboard** in the extension settings. It opens the bundled `dashboard/index.html` page directly, with live history from the extension. No localhost, server, dependency installation, or internet connection is needed for the dashboard. Reload the extension and Instagram tabs after installing this update so recording begins.
+
+The dashboard includes selectable 7-day, 30-day, and all-time ranges, daily reel-count bars, watching-time graphs, weekday averages, summary totals, and a paginated daily-history table. Long histories are grouped by month in the charts; the table keeps exact daily totals. Charts compare historical activity with your **current** daily limit. History starts when this version begins recording; past activity cannot be reconstructed.
+
+For a JSON file on disk, click **Save JSON** in the dashboard and choose where to save `reel-history.json`. In browsers supporting direct file access, the extension remembers your chosen file and updates it whenever activity is saved while file permission remains granted, including with the dashboard closed. The page reads that JSON to render its charts. History also remains in browser storage, so a disconnected file does not lose new activity. If the browser requires file permission again after a restart, click **Reconnect file**. **Open JSON** imports an existing history file, merging records without double-counting.
+
+You can also double-click `dashboard/index.html` and use **Open JSON** to view the chosen history file without opening the extension. This page reloads the file every 15 seconds. The HTML and CSS stay static; the JSON supplies the changing data. Browsers require you to choose a file before a page can access it through the [File System Access API](https://developer.chrome.com/docs/capabilities/web-apis/file-system-access). When direct file access is unavailable, **Save JSON** downloads a snapshot and **Open JSON** reads an uploaded snapshot instead.
+
+The included `dashboard/history.example.json` is an empty, valid history file. Your actual history begins recording after this update; the dashboard does not invent past activity. The default filename `reel-history.json` is excluded from Git.
+
+Developers can run the focused tests with Node.js 20+ and `npm test`; using the extension or dashboard does not require Node.js.
+
+### Keyboard shortcuts
 
 Click the **Reel Rotator** icon in your Chrome / Brave toolbar to open the Settings popup. Each rebindable shortcut has a letter input; changes apply **instantly** on the Instagram tab — no reload. Use **Reset to defaults** to restore the original bindings.
 
@@ -90,13 +116,18 @@ Click the **Reel Rotator** icon in your Chrome / Brave toolbar to open the Setti
 ```
 reel-rotator-ext/
 ├── manifest.json          # MV3 manifest, declares split content scripts in load order
-├── background.js         # Service worker: downloads via chrome.downloads (Shift+D)
+├── background.js         # Service worker: downloads + durable history and JSON file updates
 ├── content.js             # Thin orchestrator (~30 lines: init + event wiring)
 ├── popup.html / .js / .css # Settings popup (opened via toolbar icon)
 ├── styles.css             # On-page styles (rotate button, focus backdrop, queue dock)
 ├── src/
 │   ├── bridge.js          # MAIN-world script: React Fiber extraction & feed mute enforcement
 │   ├── state.js           # Single source of truth: rotation/focus/nav/queue state
+│   ├── counter-settings.js # Shared counter defaults and settings validation
+│   ├── counter.js         # Daily reel count, watch-time capture, and indicator
+│   ├── stats-model.js     # Shared daily history, snapshot merging, and date-range aggregation
+│   ├── stats-background.js # Serialized storage writes and optional JSON file updates
+│   ├── stats-file.js      # JSON validation and the chosen local file handle
 │   ├── dom-utils.js       # findActiveVideo, findScrollContainer, clickReelButton
 │   ├── rotation.js        # handleRotate, applyRotation, applyRotationInFocus
 │   ├── focus.js           # Focus mode + scroll-driven reel navigation
@@ -104,10 +135,12 @@ reel-rotator-ext/
 │   ├── queue.js           # YouTube-style persistent Reels queue, drag & drop, playlist
 │   ├── ui.js              # Button creation + observer setup
 │   └── keymap.js          # Keyboard dispatcher + storage hydration + live updates
+├── dashboard/            # Standalone index.html, charts, styles, and example history JSON
+├── tests/                # Counter, persistence, JSON files, model, and dashboard checks
 └── icons/                 # 16/48/128px toolbar & store icons
 ```
 
-Every module attaches itself to a single shared namespace (`window.__reelRotator`), loaded in dependency order declared in `manifest.json`. This keeps each file focused on one responsibility while sharing state without leaking globals into the page.
+Feed controls attach to a shared namespace (`window.__reelRotator`), loaded in dependency order declared in `manifest.json`. The history model is shared as `RRStats` between the counter, service worker, and offline dashboard.
 
 ### Features & Key Fixes in this build
 

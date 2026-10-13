@@ -40,6 +40,9 @@
     degreeBadge: null,            // .degree-badge span inside btn
     scrollContainer: null,        // cached main scroll container
 
+    // Reels scrolled today across sessions and tabs; persisted by the worker.
+    reelCount: 0,
+
     // User media preference
     userMuted: null,              // user's intended mute state (null = unset, true = muted, false = unmuted);
                                   // re-asserted after pause/play and reel navigation once set.
